@@ -3,11 +3,13 @@ import streamlit as st
 import requests
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from ui import planner, lesson
+
+# Set page configuration
+st.set_page_config(layout="wide")
 
 # Load environment variables
 load_dotenv()
-
-st.set_page_config(layout="wide")
 
 # FastAPI URL from environment variables
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
@@ -21,13 +23,13 @@ def user_signup(username, password):
 
 def user_login(username, password):
     """
-    Function to login an existing user, verifying the user user credentials through Snowflake
+    Function to login an existing user, verifying the user credentials through Snowflake
     """
     response = requests.post(f"{FASTAPI_URL}/login", params={"username": username, "password": password})
     return response.json()
 
 def signup():
-    st.subheader("Signup page!")
+    st.subheader("Signup Page")
 
     username = st.text_input("Create a valid username")
     password = st.text_input("Create a Valid password", type="password")
@@ -44,7 +46,7 @@ def signup():
             st.error("Passwords do not match. Kindly retry and enter correct passwords.")
 
 def login():
-    st.subheader("Login")
+    st.subheader("Login Page")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
@@ -54,39 +56,40 @@ def login():
             st.session_state["access_token"] = result["access_token"]
             st.session_state["username"] = username
             st.session_state["logged_in"] = True
-            st.session_state["login_time"] = datetime.now(timezone.utc)
-            st.session_state["page"] = "planner"
+            st.session_state["page"] = "planner"  # Navigate to the planner page
             st.rerun()
         else:
             st.error(result.get("detail", "Login failed"))
 
 def user_logout():
+    """Logs out the user and resets session state."""
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
-
-def page_loader():
-    """Loads planner page"""
-    if st.session_state["page"]=="planner":
-        import ui.planner as planner
-        planner.main()
-    else:
-        st.error("404 - Page Not Found")
 
 def main():
     """Main entry point for the Streamlit app."""
     st.title("Personalized AI Learning Assistant")
 
-    # Ensure session state variables are initialized
+    # Initialize session state variables
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
 
     if "page" not in st.session_state:
         st.session_state["page"] = "login"
 
-    # Display appropriate pages based on login state
+    # Page navigation logic
     if st.session_state["logged_in"]:
-        page_loader()
+        with st.sidebar:
+            st.write(f"Logged in as: {st.session_state.get('username', 'User')}")
+            user_logout()
+
+        if st.session_state["page"] == "planner":
+            planner.main()
+        elif st.session_state["page"] == "lesson":
+            lesson.main()
+        else:
+            st.error("404 - Page Not Found")
     else:
         choice = st.radio("Choose an option:", ("Login", "Signup"))
         if choice == "Signup":

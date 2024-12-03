@@ -7,16 +7,17 @@ from datetime import datetime, timezone
 # Load environment variables
 load_dotenv()
 
+st.set_page_config(layout="wide")
+
 # FastAPI URL from environment variables
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 
 def user_signup(username, password):
     """
-    Function to registerr a new user, sending a post request to the fastapi backend
+    Function to register a new user, sending a post request to the fastapi backend
     """
     response = requests.post(f"{FASTAPI_URL}/signup", params={"username": username, "password": password})
     return response.json()
-
 
 def user_login(username, password):
     """
@@ -25,9 +26,7 @@ def user_login(username, password):
     response = requests.post(f"{FASTAPI_URL}/login", params={"username": username, "password": password})
     return response.json()
 
-
-
-def display_signup_page():
+def signup():
     st.subheader("Signup page!")
 
     username = st.text_input("Create a valid username")
@@ -44,8 +43,7 @@ def display_signup_page():
         else:
             st.error("Passwords do not match. Kindly retry and enter correct passwords.")
 
-
-def display_login_page():
+def login():
     st.subheader("Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -57,42 +55,44 @@ def display_login_page():
             st.session_state["username"] = username
             st.session_state["logged_in"] = True
             st.session_state["login_time"] = datetime.now(timezone.utc)
+            st.session_state["page"] = "planner"
             st.rerun()
         else:
             st.error(result.get("detail", "Login failed"))
 
-
 def user_logout():
-    
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
 
-
-def show_dashboard_upon_authentication():
-    st.write(f"Welcome, {st.session_state['username']}!")
-    # st.write(f"Login Time: {st.session_state['login_time']}")
-    st.write("You are successfully logged in. Happy learning!")
-    user_logout()
-
+def page_loader():
+    """Loads planner page"""
+    if st.session_state["page"]=="planner":
+        import ui.planner as planner
+        planner.main()
+    else:
+        st.error("404 - Page Not Found")
 
 def main():
     """Main entry point for the Streamlit app."""
-    st.title("User Authentication App")
+    st.title("Personalized AI Learning Assistant")
 
     # Ensure session state variables are initialized
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
 
+    if "page" not in st.session_state:
+        st.session_state["page"] = "login"
+
     # Display appropriate pages based on login state
     if st.session_state["logged_in"]:
-        show_dashboard_upon_authentication()
+        page_loader()
     else:
         choice = st.radio("Choose an option:", ("Login", "Signup"))
         if choice == "Signup":
-            display_signup_page()
+            signup()
         else:
-            display_login_page()
+            login()
 
 if __name__ == "__main__":
     main()

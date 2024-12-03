@@ -10,6 +10,11 @@ python = "^3.12"
 streamlit = "^1.40.2"
 requests = "^2.32.3"
 python-dotenv = "^1.0.1"
+openai = "^1.56.1"
+pinecone-client = "^5.0.1"
+tiktoken = "^0.8.0"
+scikit-learn = "^1.5.2"
+google-api-python-client = "^2.154.0"
 
 
 [build-system]

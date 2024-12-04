@@ -228,9 +228,7 @@ def generate_plan(user_query, context_info, current_plan=None):
         return plan_response.choices[0].message.content
     except Exception as e:
         logging.error("Error in generate_plan: %s", str(e))
-        raise HTTPException(status_code=500, detail="Internal Server Error during plan generation")
-
-
+        return '{"error": "Plan generation failed due to an internal error."}'
 
 def validate_and_clean_json(response_text):
     try:
@@ -243,7 +241,6 @@ def validate_and_clean_json(response_text):
         return json.loads(json_text)
     except Exception as e:
         return None
-
 
 def summarize_plan(plan):
     summary_response = client.chat.completions.create(
@@ -283,6 +280,7 @@ async def login(username: str = Query(...), password: str = Query(...)):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     access_token = create_access_token(data={"sub": username})
     return {"access_token": access_token, "token_type": "bearer"}
+
 @app.post("/query")
 async def query_router(request: dict):
     user_query = request.get("user_query")
@@ -323,7 +321,6 @@ async def query_router(request: dict):
         else:
             # Case 2: No relevant context found → Retain the previous plan and summary
             if current_plan:
-                # Generate a fallback response using the LLM
                 fallback_response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                    messages=[
@@ -364,69 +361,12 @@ async def query_router(request: dict):
                 response_data.update({
                     "response": fallback_response.choices[0].message.content
                 })
-
     except Exception as e:
         logging.error("Error processing query: %s", str(e))
         response_data["response"] = "An error occurred while processing your query. Please try again later."
 
     return response_data
 
-
-def generate_plan(user_query, context_info, current_plan=None):
-    try:
-        if not context_info:
-            logging.info("No relevant context found, skipping plan generation")
-            return "No relevant information found in the Knowledge Base"
-
-        system_prompt = (
-            "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
-            "Focus on clear objectives, key topics, step-by-step actions, a realistic timeline, and clear expected outcomes. "
-            "Adjust the number of lessons to suit the user's query and complexity of the topic. "
-            "Do not include any explanations or comments. Return only valid JSON output in this format:\n"
-            "{\n"
-            '  "Objective": "...",\n'
-            '  "KeyTopics": ["...", "..."],\n'
-            '  "Weeks": [\n'
-            '    {"week": "Week 1", "title": "...", "details": "..."},\n'
-            '    {"week": "Week 2", "title": "...", "details": "..."},\n'
-            "    ...\n"
-            "  ],\n"
-            '  "Timeline": "...",\n'
-            '  "ExpectedOutcome": "..."'
-            "\n}"
-        )
-
-        if current_plan:
-            current_plan_text = json.dumps(current_plan, indent=2)
-            user_prompt = (
-                f"Here is the current learning plan:\n{current_plan_text}\n\n"
-                f"User Query: {user_query}\n"
-                "Update the learning plan based on the query. Make sure to incorporate the user's new focus or requirements "
-                "while retaining the structure and relevant parts of the existing plan."
-            )
-        else:
-            user_prompt = (
-                f"User Query: {user_query}\nContext: {context_info}\n"
-                "Create a new structured learning plan based on the query and context."
-            )
-
-        # Log the user prompt to see the input to OpenAI API
-        logging.debug("User prompt: %s", user_prompt)
-
-        plan_response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-        )
-
-        logging.debug("Plan response: %s", plan_response)
-
-        return plan_response.choices[0].message.content
-    except Exception as e:
-        logging.error("Error in generate_plan: %s", str(e))
-        return '{"error": "Plan generation failed due to an internal error."}'
 
 @app.get("/")
 async def root():

@@ -72,52 +72,92 @@ def retrieve_information(user_query):
         for match in results["matches"]
     ])
     return context_info
-
-def generate_plan(user_query, context_info):
+def generate_plan(user_query, context_info, current_plan=None):
     """
-    Calls GPT to generate a structured learning plan based on the query and retrieved information.
-    
+    Calls GPT to generate or refine a structured learning plan based on the query and retrieved information.
+
     Args:
         user_query (str): The user query.
         context_info (str): The retrieved information.
-        
+        current_plan (dict, optional): The current plan to refine. If None, a new plan will be created.
+
     Returns:
-        str: The generated learning plan in structured JSON format.
+        str: The generated or refined learning plan in structured JSON format.
     """
     if not context_info:
         return "No relevant information found in the Knowledge Base"
 
+    # Base prompt for the assistant
+    system_prompt = (
+        "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
+        "Focus on clear objectives, key topics, step-by-step actions, a realistic timeline, and clear expected outcomes. "
+        "Adjust the number of lessons to suit the user's query and complexity of the topic. "
+        "Do not include any explanations or comments. Return only valid JSON output in this format:\n"
+        "{\n"
+        '  "Objective": "...",\n'
+        '  "KeyTopics": ["...", "..."],\n'
+        '  "Weeks": [\n'
+        '    {"week": "Week 1", "title": "...", "details": "..."},\n'
+        '    {"week": "Week 2", "title": "...", "details": "..."},\n'
+        "    ...\n"
+        "  ],\n"
+        '  "Timeline": "...",\n'
+        '  "ExpectedOutcome": "..."'
+        "\n}"
+    )
+
+    # Add the current plan to the user query if it exists
+    if current_plan:
+        # Format the current plan as JSON for clarity
+        current_plan_text = json.dumps(current_plan, indent=2)
+        user_prompt = (
+            f"Here is the current learning plan:\n{current_plan_text}\n\n"
+            f"User Query: {user_query}\n"
+            "Update the learning plan based on the query. Make sure to incorporate the user's new focus or requirements "
+            "while retaining the structure and relevant parts of the existing plan."
+        )
+    else:
+        # If no current plan exists, create a new one
+        user_prompt = (
+            f"User Query: {user_query}\nContext: {context_info}\n"
+            "Create a new structured learning plan based on the query and context."
+        )
+
+    # Call the OpenAI API
     plan_response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
-                    "Focus on clear objectives, key topics, step-by-step actions, a realistic timeline, and clear expected outcomes. "
-                    "Adjust the number of lessons to suit the user's query and complexity of the topic. "
-                    "Return output in this format:\n"
-                    "{\n"
-                    '  "Objective": "...",\n'
-                    '  "KeyTopics": ["...", "..."],\n'
-                    '  "Weeks": [\n'
-                    '    {"week": "Week 1", "title": "...", "details": "..."},\n'
-                    '    {"week": "Week 2", "title": "...", "details": "..."},\n'
-                    "    ...\n"
-                    "  ],\n"
-                    '  "Timeline": "...",\n'
-                    '  "ExpectedOutcome": "..."'
-                    "\n}"
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"Query: {user_query}\nContext: {context_info}",
-            },
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
         ]
     )
-    
+
     return plan_response.choices[0].message.content
+
+
+def validate_and_clean_json(response_text):
+    """
+    Validates and extracts JSON from the LLM response.
+
+    Args:
+        response_text (str): The raw response text from the LLM.
+
+    Returns:
+        dict: Parsed JSON object if valid, or None if invalid.
+    """
+    try:
+        # Locate the JSON part by finding the opening and closing braces
+        start_idx = response_text.find("{")
+        end_idx = response_text.rfind("}") + 1
+        if start_idx == -1 or end_idx == -1:
+            return None  # No valid JSON found
+        
+        # Extract the JSON substring and parse it
+        json_text = response_text[start_idx:end_idx]
+        return json.loads(json_text)
+    except Exception as e:
+        return None
+
 
 def summarize_plan(plan):
     """
@@ -186,52 +226,50 @@ def parse_learning_plan(plan_text):
 
     return structured_plan
 
-def chat_with_plan(user_input, plan):
-    """
-    Handles chat-based interactions with the learning plan using OpenAI.
-    
-    Args:
-        user_input (str): The user query for editing or refining the plan.
-        plan (str): The current learning plan in JSON format.
-        
-    Returns:
-        str: The updated or refined learning plan.
-    """
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an assistant helping users refine their learning plans. "
-                    "They will provide suggestions or edits for the plan. Respond by summarizing the updated plan and listing of key changes."
-                    "Ensure any changes are logical and practical, without deviating from the user's goals."
-                )
-            },
-            {
-                "role": "user",
-                "content": f"Current Plan: {plan}\nUser Suggestion: {user_input}"
-            }
-        ]
-    )
-    return response.choices[0].message.content
-
-
-# -----Main Function-----
-
 def main():
     st.title("Planner")
 
-    user_query = st.text_input("What do you want to learn today?")
+    # Initialize chat history and current plan in session state if not present
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+    if "current_plan" not in st.session_state:
+        st.session_state["current_plan"] = None
+
+    # Chat interface with chat history display (user inputs only)
+    st.markdown("### Your Queries:")
+    with st.container():
+        if st.session_state["chat_history"]:
+            for chat in st.session_state["chat_history"]:
+                st.markdown(f"🗨️ {chat}")  # Display user inputs in a chat-like format
+        else:
+            st.markdown("No queries yet. Start by asking something!")
+
+    # Chat input for user query
+    user_query = st.chat_input("What do you want to learn today?")
 
     if user_query:
-        context_info = retrieve_information(user_query)
-        learning_plan_json = generate_plan(user_query, context_info)
-        
+        # Add user query to chat history
+        st.session_state["chat_history"].append(user_query)
+
+        # Retrieve context and determine whether to refine or create a new plan
+        if st.session_state["current_plan"]:
+            # If a current plan exists, pass it as context for refinement
+            context_info = retrieve_information(user_query)
+            current_plan_text = json.dumps(st.session_state["current_plan"])
+            combined_context = f"Current Plan: {current_plan_text}\nUser Query: {user_query}"
+            learning_plan_json = generate_plan(user_query, combined_context)
+        else:
+            # If no current plan exists, generate a new one
+            context_info = retrieve_information(user_query)
+            learning_plan_json = generate_plan(user_query, context_info)
+
         # Parse JSON response
         try:
-            plan = json.loads(learning_plan_json) 
-        except json.JSONDecodeError:
+            plan = validate_and_clean_json(learning_plan_json)
+            if not plan:
+                raise ValueError("Invalid JSON format in LLM response.")
+            st.session_state["current_plan"] = plan  # Save the new or updated plan
+        except ValueError as ve:
             st.error("Failed to parse learning plan JSON. Please ensure the LLM returns valid JSON.")
             return
         except Exception as e:
@@ -245,7 +283,6 @@ def main():
         with st.expander("Outcomes"):
             st.markdown(f"**Timeline:** {plan.get('Timeline', 'N/A')}")
             st.markdown(f"**Expected Outcome:** {plan.get('ExpectedOutcome', 'N/A')}")
-            
 
         # Display Summary as Plain Text
         st.markdown("### Summary")
@@ -270,26 +307,6 @@ def main():
         st.markdown("### Key Topics")
         for topic in plan.get('KeyTopics', []):
             st.write(f"- {topic}")
-
-        # Chatbot Interaction for Editing
-        with st.expander("Refine Your Plan"):
-            if "chat_history" not in st.session_state:
-                st.session_state["chat_history"] = []
-
-            user_message = st.text_input("Suggest an edit or refinement to your plan:")
-            
-            if st.button("Submit Edit"):
-                if user_message:
-                    st.session_state["chat_history"].append({"role": "user", "content": user_message})
-                    updated_plan = chat_with_plan(user_message, json.dumps(plan))
-                    st.session_state["chat_history"].append({"role": "assistant", "content": updated_plan})
-            
-            # Display chat history
-            for chat in st.session_state["chat_history"]:
-                if chat["role"] == "user":
-                    st.markdown(f"**You:** {chat['content']}")
-                elif chat["role"] == "assistant":
-                    st.markdown(f"**Assistant:** {chat['content']}")
 
     # Check if a week is selected and navigate to lesson page
     if "page" in st.session_state and st.session_state["page"] == "lesson":

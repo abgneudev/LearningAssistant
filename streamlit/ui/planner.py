@@ -186,6 +186,35 @@ def parse_learning_plan(plan_text):
 
     return structured_plan
 
+def chat_with_plan(user_input, plan):
+    """
+    Handles chat-based interactions with the learning plan using OpenAI.
+    
+    Args:
+        user_input (str): The user query for editing or refining the plan.
+        plan (str): The current learning plan in JSON format.
+        
+    Returns:
+        str: The updated or refined learning plan.
+    """
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an assistant helping users refine their learning plans. "
+                    "They will provide suggestions or edits for the plan. Respond by summarizing the updated plan and listing of key changes."
+                    "Ensure any changes are logical and practical, without deviating from the user's goals."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"Current Plan: {plan}\nUser Suggestion: {user_input}"
+            }
+        ]
+    )
+    return response.choices[0].message.content
 
 
 # -----Main Function-----
@@ -242,7 +271,26 @@ def main():
         for topic in plan.get('KeyTopics', []):
             st.write(f"- {topic}")
 
+        # Chatbot Interaction for Editing
+        with st.expander("Refine Your Plan"):
+            if "chat_history" not in st.session_state:
+                st.session_state["chat_history"] = []
+
+            user_message = st.text_input("Suggest an edit or refinement to your plan:")
+            
+            if st.button("Submit Edit"):
+                if user_message:
+                    st.session_state["chat_history"].append({"role": "user", "content": user_message})
+                    updated_plan = chat_with_plan(user_message, json.dumps(plan))
+                    st.session_state["chat_history"].append({"role": "assistant", "content": updated_plan})
+            
+            # Display chat history
+            for chat in st.session_state["chat_history"]:
+                if chat["role"] == "user":
+                    st.markdown(f"**You:** {chat['content']}")
+                elif chat["role"] == "assistant":
+                    st.markdown(f"**Assistant:** {chat['content']}")
+
     # Check if a week is selected and navigate to lesson page
     if "page" in st.session_state and st.session_state["page"] == "lesson":
-        lesson.main() 
-
+        lesson.main()

@@ -173,17 +173,16 @@ def retrieve_information(user_query):
         logging.error("Error in retrieve_information: %s", str(e))
         raise HTTPException(status_code=500, detail="Internal Server Error during information retrieval")
 
-
 def generate_plan(user_query, context_info, current_plan=None):
     try:
-        if not context_info:
-            logging.info("No relevant context found, skipping plan generation")
+        if not context_info and not current_plan:
+            logging.info("No relevant context or existing plan found, skipping plan generation")
             return "No relevant information found in the Knowledge Base"
 
         system_prompt = (
             "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
             "Focus on clear objectives, key topics, step-by-step actions, a realistic timeline, and clear expected outcomes. "
-            "Adjust the number of lessons to suit the user's query and complexity of the topic. "
+            "If the query refers to updating an existing plan, modify only the relevant sections to reflect the user's request. "
             "Do not include any explanations or comments. Return only valid JSON output in this format:\n"
             "{\n"
             '  "Objective": "...",\n'
@@ -203,8 +202,8 @@ def generate_plan(user_query, context_info, current_plan=None):
             user_prompt = (
                 f"Here is the current learning plan:\n{current_plan_text}\n\n"
                 f"User Query: {user_query}\n"
-                "Update the learning plan based on the query. Make sure to incorporate the user's new focus or requirements "
-                "while retaining the structure and relevant parts of the existing plan."
+                "Update the learning plan based on the query. Modify only the relevant sections (e.g., adjust focus, add emphasis, or refine topics). "
+                "Ensure that the updated plan reflects the user's request while retaining the original structure and relevant parts."
             )
         else:
             user_prompt = (
@@ -212,7 +211,7 @@ def generate_plan(user_query, context_info, current_plan=None):
                 "Create a new structured learning plan based on the query and context."
             )
 
-        # Log the user prompt to see the input to OpenAI API
+        # Log the user prompt for debugging
         logging.debug("User prompt: %s", user_prompt)
 
         plan_response = client.chat.completions.create(
@@ -225,22 +224,41 @@ def generate_plan(user_query, context_info, current_plan=None):
 
         logging.debug("Plan response: %s", plan_response)
 
-        return plan_response.choices[0].message.content
+        # Clean and validate JSON response
+        plan_content = plan_response.choices[0].message.content
+        logging.info("Raw Generated Plan: %s", plan_content)
+
+        # Strip trailing commas (fix invalid JSON)
+        plan_content = plan_content.replace(",\n  ]", "\n  ]").replace(",\n}", "\n}")
+
+        logging.info("Cleaned Plan: %s", plan_content)
+        return plan_content
     except Exception as e:
         logging.error("Error in generate_plan: %s", str(e))
         return '{"error": "Plan generation failed due to an internal error."}'
+
+
 
 def validate_and_clean_json(response_text):
     try:
         start_idx = response_text.find("{")
         end_idx = response_text.rfind("}") + 1
         if start_idx == -1 or end_idx == -1:
+            logging.error("JSON validation failed: No JSON object found in response.")
             return None
 
         json_text = response_text[start_idx:end_idx]
-        return json.loads(json_text)
-    except Exception as e:
+        plan = json.loads(json_text)
+        logging.info("Validated and cleaned JSON: %s", plan)
+        return plan
+    except json.JSONDecodeError as e:
+        logging.error("Error decoding JSON: %s", str(e))
+        logging.error("Raw JSON Response: %s", response_text)
         return None
+    except Exception as e:
+        logging.error("Unexpected error during JSON validation: %s", str(e))
+        return None
+
 
 def summarize_plan(plan):
     summary_response = client.chat.completions.create(
@@ -294,13 +312,13 @@ async def query_router(request: dict):
 
     # Initialize response object
     response_data = {
-        "plan": None,
+        "plan": current_plan,  # Retain the current plan by default
         "summary": current_summary,
         "response": "Unable to process the query. Please try again later."
     }
 
     try:
-        # Check for relevance in the knowledge base
+        # Step 1: Check for relevance in the knowledge base
         context_info = retrieve_information(user_query)
 
         if context_info:
@@ -308,65 +326,215 @@ async def query_router(request: dict):
             learning_plan_json = generate_plan(user_query, context_info, current_plan)
             plan = validate_and_clean_json(learning_plan_json)
 
-            if not plan:
-                response_data["response"] = "Failed to generate or parse learning plan."
-            else:
+            if plan:
                 summary = summarize_plan(plan)
-                response_data.update({
-                    "plan": plan,
-                    "summary": summary,
-                    "response": "I've updated the plan based on your query."
-                })
 
-        else:
-            # Case 2: No relevant context found → Retain the previous plan and summary
-            if current_plan:
-                fallback_response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                   messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a helpful assistant specializing in data science. The knowledge base contains vectorized content from "
-                                "GeeksforGeeks covering all data science topics. If the user's query is relevant to the knowledge base, provide a concise, "
-                                "accurate, and helpful response. If the query is unrelated to data science, politely explain that the knowledge base is "
-                                "focused on data science topics and suggest the user reframe their query if applicable."
-                            )
-                        },
-                        {"role": "user", "content": user_query},
-                    ] ,
+                # Generate dynamic response based on user query and context using LLM
+                response_prompt = (
+                    "You are a helpful assistant specializing in creating and updating learning plans. Based on the following information, "
+                    "generate a professional and relevant response summarizing the action taken:\n"
+                    f"User Query: {user_query}\n"
+                    f"Existing Plan: {current_plan}\n"
+                    f"Generated Plan: {plan}\n"
+                    "Ensure the response clearly communicates the action taken and its relevance to the user's input. Be specific."
                 )
-                response_data.update({
-                    "plan": current_plan,
-                    "summary": current_summary,
-                    "response": fallback_response.choices[0].message.content
-                })
-            else:
-                # No plan exists
-                fallback_response = client.chat.completions.create(
+                response_generation = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a helpful assistant specializing in data science. The knowledge base contains vectorized content from "
-                                "GeeksforGeeks covering all data science topics. If the user's query is relevant to the knowledge base, provide a concise, "
-                                "accurate, and helpful response. If the query is unrelated to data science, politely explain that the knowledge base is "
-                                "focused on data science topics and suggest the user reframe their query if applicable."
-                            )
-                        },
+                        {"role": "system", "content": response_prompt},
                         {"role": "user", "content": user_query},
                     ],
                 )
+                response_text = response_generation.choices[0].message.content.strip()
+
                 response_data.update({
-                    "response": fallback_response.choices[0].message.content
+                    "plan": plan,
+                    "summary": summary,
+                    "response": response_text
                 })
+                logging.info("Successfully updated the plan.")
+            else:
+                response_data["response"] = "Failed to generate or parse learning plan."
+                logging.error("Plan generation failed. Raw response: %s", learning_plan_json)
+
+        elif current_plan:
+            # Case 2: Indirectly relevant query or context to refine the plan
+            refine_prompt = (
+                "You are an assistant specializing in refining learning plans. "
+                "Determine if the user's query provides additional context to refine the current plan. "
+                "If yes, generate an updated plan. If no, explain the relevance of the current plan or address the query conversationally.\n"
+                f"User Query: {user_query}\n"
+                f"Current Plan: {current_plan}"
+            )
+            refine_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": refine_prompt},
+                    {"role": "user", "content": user_query},
+                ],
+            )
+
+            refinement = refine_response.choices[0].message.content.strip()
+
+            if refinement.startswith("{"):  # Check if the response includes a refined plan
+                updated_plan = validate_and_clean_json(refinement)
+                if updated_plan:
+                    response_data.update({
+                        "plan": updated_plan,
+                        "summary": summarize_plan(updated_plan),
+                        "response": f"Plan updated based on your input: '{user_query}'."
+                    })
+                else:
+                    response_data["response"] = "Failed to refine the existing plan."
+            else:
+                # Retain the existing plan and provide a response
+                response_data.update({
+                    "response": refinement,
+                    "plan": current_plan,  # Explicitly retain the current plan
+                    "summary": current_summary  # Keep the existing summary
+                })
+
+        else:
+            # Case 3: Irrelevant or general conversational input
+            general_prompt = (
+                "You are a helpful assistant specializing in general conversational responses. "
+                "The user's input is unrelated to learning plans or the knowledge base. "
+                "Respond politely and professionally, focusing on the role of a data science assistant."
+            )
+            general_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": general_prompt},
+                    {"role": "user", "content": user_query},
+                ],
+            )
+            response_data.update({
+                "response": general_response.choices[0].message.content.strip(),
+                "plan": current_plan,  # Explicitly retain the current plan
+                "summary": current_summary  # Keep the existing summary
+            })
+
     except Exception as e:
         logging.error("Error processing query: %s", str(e))
         response_data["response"] = "An error occurred while processing your query. Please try again later."
 
+    logging.info("Final response data: %s", response_data)
     return response_data
 
+@app.post("/save_plan")
+async def save_plan(request: dict):
+    """
+    Save the learning plan and weekly details to Snowflake.
+    """
+    plan = request.get("plan")
+    summary = request.get("summary")
+
+    if not plan or not summary:
+        raise HTTPException(status_code=400, detail="Plan and summary are required.")
+
+    connection = get_db_connection()
+    try:
+        cursor = connection.cursor()
+
+        # Insert plan into the database
+        plan_id = plan.get("PlanID", str(datetime.utcnow().timestamp()))
+        timeline = plan.get("Timeline", "N/A")
+        expected_outcome = plan.get("ExpectedOutcome", "N/A")
+        key_topics = json.dumps(plan.get("KeyTopics", []))
+
+        cursor.execute(
+            """
+            INSERT INTO plans (plan_id, summary, key_topics, learning_outcomes, timeline)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (plan_id, summary, key_topics, expected_outcome, timeline)
+        )
+
+        # Insert weekly details
+        for week in plan.get("Weeks", []):
+            week_id = week.get("WeekID", str(datetime.utcnow().timestamp()))
+            week_title = week.get("title", "No Title")
+            week_details = week.get("details", "No Details")
+            cursor.execute(
+                """
+                INSERT INTO weeks (week_id, plan_id, week, title, description)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (week_id, plan_id, week["week"], week_title, week_details)
+            )
+
+        connection.commit()
+        return {"message": "Plan saved successfully.", "plan_id": plan_id}
+    except Exception as e:
+        connection.rollback()
+        logging.error("Error saving plan: %s", str(e))
+        raise HTTPException(status_code=500, detail="An error occurred while saving the plan.")
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.get("/get_plans")
+def get_plans():
+    connection = get_db_connection()
+    try:
+        cursor = connection.cursor()
+        # Include `learning_outcomes` in the SELECT query
+        cursor.execute("SELECT plan_id, summary, key_topics, learning_outcomes, timeline FROM plans")
+        plans = [
+            {
+                "plan_id": row[0],
+                "summary": row[1],
+                "key_topics": json.loads(row[2]) if row[2] else [],
+                "learning_outcomes": row[3],  # Add this line to include learning outcomes
+                "timeline": row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        if not plans:
+            logging.info("No plans found in the database.")
+            return {"message": "No plans available"}
+
+        return plans
+    except Exception as e:
+        logging.error(f"Error fetching plans: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch plans")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/get_weeks/{plan_id}")
+def get_weeks(plan_id: str):
+    connection = get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT week_id, plan_id, week, title, description FROM weeks WHERE plan_id = %s", 
+            (plan_id,)
+        )
+        weeks = cursor.fetchall()
+
+        if not weeks:
+            logging.warning(f"No weeks found for plan_id: {plan_id}")
+            return {"message": f"No weeks available for plan ID: {plan_id}"}
+
+        return [
+            {
+                "week_id": row[0],
+                "plan_id": row[1],
+                "week": row[2],
+                "title": row[3],
+                "description": row[4],
+            }
+            for row in weeks
+        ]
+    except Exception as e:
+        logging.error(f"Error fetching weeks for plan_id {plan_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch weeks")
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.get("/")
 async def root():

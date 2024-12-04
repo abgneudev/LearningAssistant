@@ -2,10 +2,11 @@ import streamlit as st
 import requests
 import json
 
+
 def main():
     st.title("Planner")
 
-    # Initialize chat history, current plan, and fallback response if not present
+    # Initialize chat history, current plan, save status, and fallback response if not present
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
     if "current_plan" not in st.session_state:
@@ -14,6 +15,8 @@ def main():
         st.session_state["current_summary"] = "No summary provided yet."  # To retain the summary for the current plan
     if "general_response" not in st.session_state:
         st.session_state["general_response"] = "No general response yet."
+    if "save_status" not in st.session_state:
+        st.session_state["save_status"] = None  # Track save status for the plan
 
     # Chat input for user query
     user_query = st.chat_input("What do you want to learn today?")
@@ -24,7 +27,7 @@ def main():
 
         # Make a request to the backend for processing
         response = requests.post(
-            "http://127.0.0.1:8000/query",  # Using the `/query` endpoint
+            "http://127.0.0.1:8000/query",
             json={
                 "user_query": user_query,
                 "current_plan": st.session_state.get("current_plan"),
@@ -42,12 +45,12 @@ def main():
                 st.session_state["current_summary"] = summary  # Update or retain the summary
                 st.session_state["chat_history"].append({"role": "assistant", "content": summary})
 
-                # Update general response to indicate the plan has been updated
+                # Update general response for a generated plan
                 st.session_state["general_response"] = data.get(
                     "response", "I've generated a plan for you based on your query."
                 )
 
-                # Display Metadata
+                # Display plan metadata and details
                 if st.session_state["current_plan"]:
                     with st.expander("Outcomes"):
                         timeline = st.session_state["current_plan"].get("Timeline", "N/A")
@@ -60,7 +63,6 @@ def main():
                     st.text(summary)
 
                     # Display Weekly Tabs
-                    st.markdown("### Weekly Plan")
                     weeks = st.session_state["current_plan"].get("Weeks", [])
                     if weeks:
                         week_tabs = [week["week"] for week in weeks]
@@ -72,11 +74,6 @@ def main():
                                 st.markdown(f"#### {week['title']}")
                                 st.write(week['details'])
 
-                                if st.button(f"Go to Lesson - {week['week']}", key=f"button_{week['week']}"):
-                                    st.session_state["current_week"] = week
-                                    st.session_state["page"] = "lesson"
-                                    st.rerun()
-
                     # Display Key Topics
                     st.markdown("### Key Topics")
                     for topic in st.session_state["current_plan"].get("KeyTopics", []):
@@ -84,7 +81,6 @@ def main():
 
             # Handle fallback response if no plan is available
             elif data.get("response"):
-                # Update the general response dynamically
                 st.session_state["general_response"] = data["response"]
                 st.session_state["chat_history"].append({"role": "assistant", "content": data["response"]})
 
@@ -97,13 +93,43 @@ def main():
             st.session_state["general_response"] = "Failed to process the query. Please try again later."
             st.error("Failed to process the query. Please try again later.")
 
+    # Add Save Plan to Database functionality
+    if st.session_state["current_plan"]:
+        if st.button("Save Plan to Database", key="save_plan_button"):
+            try:
+                save_response = requests.post(
+                    "http://127.0.0.1:8000/save_plan",
+                    json={
+                        "plan": st.session_state["current_plan"],
+                        "summary": st.session_state["current_summary"],
+                    },
+                )
+
+                if save_response.status_code == 200:
+                    st.session_state["save_status"] = f"Plan saved successfully. Plan ID: {save_response.json().get('plan_id')}"
+                else:
+                    st.session_state["save_status"] = f"Failed to save plan: {save_response.json().get('detail', 'Unknown error')}"
+            except Exception as e:
+                st.session_state["save_status"] = f"An error occurred while saving the plan: {e}"
+
+        # Display save status without refreshing
+        if st.session_state["save_status"]:
+            st.success(st.session_state["save_status"])
+
+    # Navigate to the Saved Plans page
+    if st.button("View Saved Plans"):
+        st.session_state["page"] = "plans"  # Update current page to "plans"
+        st.rerun()  # Trigger rerun to load the new page
+
+
     # Display the general response in another text area
     st.text_area(
-        "General Response",
+        "Learning Assistant Response",
         value=st.session_state.get("general_response", "No general response yet."),
         height=200,
         key="general_response_text"
     )
+
 
 if __name__ == "__main__":
     main()

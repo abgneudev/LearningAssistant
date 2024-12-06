@@ -467,7 +467,7 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
         # Insert plan into the database
         plan_id = plan.get("PlanID", str(datetime.utcnow().timestamp()))
         key_topics = json.dumps(plan.get("KeyTopics", []))
-        learning_outcomes = plan.get("LearningOutcomes", "N/A")  # Include learning outcomes
+        learning_outcomes = plan.get("ExpectedOutcome", "N/A")  # Include learning outcomes
 
         cursor.execute(
             """

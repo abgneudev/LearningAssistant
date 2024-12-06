@@ -130,6 +130,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Ignore local Python environments
+fastapi/fast_env/
+streamlit/str_env/
+
 # Spyder project settings
 .spyderproject
 .spyproject

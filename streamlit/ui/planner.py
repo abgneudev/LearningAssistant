@@ -66,6 +66,12 @@ def main():
                             expected_outcome = st.session_state["current_plan"].get("ExpectedOutcome", "N/A")
                             st.markdown(f"**Expected Outcome:** {expected_outcome}")
 
+                            key_topics = st.session_state["current_plan"].get("KeyTopics", [])
+                            if key_topics:
+                                st.markdown("**Key Topics:**")
+                                for topic in key_topics:
+                                    st.write(f"- {topic}")
+
                         # Display Summary
                         st.markdown("### Summary")
                         st.text(summary)
@@ -82,10 +88,10 @@ def main():
                                     st.markdown(f"#### {module['title']}")
                                     st.write(module['description'])
 
-                        # Display Key Topics
-                        st.markdown("### Key Topics")
-                        for topic in st.session_state["current_plan"].get("KeyTopics", []):
-                            st.write(f"- {topic}")
+                        # # Display Key Topics
+                        # st.markdown("### Key Topics")
+                        # for topic in st.session_state["current_plan"].get("KeyTopics", []):
+                        #     st.write(f"- {topic}")
 
                 # Handle fallback response if no plan is available
                 elif data.get("response"):

@@ -502,24 +502,34 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
         connection.close()
 
 @app.get("/get_plans")
-def get_plans():
+def get_plans(username: str = Depends(get_current_username)):
+    """
+    Fetch all plans for the currently logged-in user.
+    """
     connection = get_db_connection()
     try:
         cursor = connection.cursor()
-        # Include `learning_outcomes` in the SELECT query
-        cursor.execute("SELECT plan_id, summary, key_topics, learning_outcomes FROM plans")
+        # Query only the plans associated with the current user
+        cursor.execute(
+            """
+            SELECT plan_id, summary, key_topics, learning_outcomes
+            FROM plans
+            WHERE username = %s
+            """,
+            (username,),
+        )
         plans = [
             {
                 "plan_id": row[0],
                 "summary": row[1],
                 "key_topics": json.loads(row[2]) if row[2] else [],
-                "learning_outcomes": row[3]  # Add this line to include learning outcomes
+                "learning_outcomes": row[3],  # Add this line to include learning outcomes
             }
             for row in cursor.fetchall()
         ]
 
         if not plans:
-            logging.info("No plans found in the database.")
+            logging.info(f"No plans found for user: {username}")
             return {"message": "No plans available"}
 
         return plans
@@ -529,6 +539,7 @@ def get_plans():
     finally:
         cursor.close()
         connection.close()
+
 
 @app.get("/get_modules/{plan_id}")
 def get_modules(plan_id: str):

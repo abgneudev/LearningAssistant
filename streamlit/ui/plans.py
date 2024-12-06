@@ -5,12 +5,13 @@ import requests
 def main():
     st.title("Saved Plans")
 
-    # Ensure username is available in session state
-    if "username" not in st.session_state:
+    # Ensure username and access_token are available in session state
+    if "username" not in st.session_state or "access_token" not in st.session_state:
         st.error("You are not logged in. Please log in to view your plans.")
         return
 
     username = st.session_state["username"]
+    access_token = st.session_state["access_token"]
 
     # Button to navigate back to the Planner
     if st.button("Make a new Plan"):
@@ -19,9 +20,15 @@ def main():
 
     # Fetch all saved plans for the logged-in user from the backend
     try:
-        response = requests.get(f"http://127.0.0.1:8000/get_plans?username={username}")
+        response = requests.get(
+            "http://127.0.0.1:8000/get_plans",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
         if response.status_code == 200:
-            plans = response.json()  # Assuming backend returns a list of plans
+            plans = response.json()  # Backend filters plans based on logged-in user
+            if isinstance(plans, dict) and "message" in plans:
+                st.warning(plans["message"])  # Display a message if no plans are found
+                plans = []
         else:
             st.error("Failed to fetch plans.")
             plans = []
@@ -64,11 +71,14 @@ def main():
 
         # Fetch modules for the selected plan
         try:
-            modules_response = requests.get(f"http://127.0.0.1:8000/get_modules/{selected_plan_id}")
+            modules_response = requests.get(
+                f"http://127.0.0.1:8000/get_modules/{selected_plan_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
             if modules_response.status_code == 200:
-                modules = modules_response.json()  # Assuming backend returns a list of modules
+                modules = modules_response.json()  # Backend returns modules for the selected plan
                 if isinstance(modules, dict) and "message" in modules:
-                    st.warning(modules["message"])  # Display message if no modules are found
+                    st.warning(modules["message"])  # Display a message if no modules are found
                     modules = []
             else:
                 st.error("Failed to fetch modules for the selected plan.")

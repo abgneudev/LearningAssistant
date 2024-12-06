@@ -6,11 +6,12 @@ import json
 def main():
     st.title("Planner")
 
-    # Ensure username is available in session state
-    if "username" not in st.session_state:
+    # Ensure token and username are available in session state
+    if "access_token" not in st.session_state or "username" not in st.session_state:
         st.error("You are not logged in. Please log in to create or view plans.")
         return
 
+    access_token = st.session_state["access_token"]
     username = st.session_state["username"]
 
     # Initialize chat history, current plan, save status, and fallback response if not present
@@ -33,70 +34,75 @@ def main():
         st.session_state["chat_history"].append({"role": "user", "content": user_query})
 
         # Make a request to the backend for processing
-        response = requests.post(
-            "http://127.0.0.1:8000/query",
-            json={
-                "user_query": user_query,
-                "current_plan": st.session_state.get("current_plan"),
-                "current_summary": st.session_state.get("current_summary"),  # Pass current summary
-            },
-        )
+        try:
+            response = requests.post(
+                "http://127.0.0.1:8000/query",
+                json={
+                    "user_query": user_query,
+                    "current_plan": st.session_state.get("current_plan"),
+                    "current_summary": st.session_state.get("current_summary"),  # Pass current summary
+                },
+                headers={"Authorization": f"Bearer {access_token}"},  # Include token
+            )
 
-        if response.status_code == 200:
-            data = response.json()
+            if response.status_code == 200:
+                data = response.json()
 
-            # Handle learning plan if it exists
-            if data.get("plan"):
-                st.session_state["current_plan"] = data["plan"]
-                summary = data.get("summary", st.session_state["current_summary"])  # Retain the previous summary if not updated
-                st.session_state["current_summary"] = summary  # Update or retain the summary
-                st.session_state["chat_history"].append({"role": "assistant", "content": summary})
+                # Handle learning plan if it exists
+                if data.get("plan"):
+                    st.session_state["current_plan"] = data["plan"]
+                    summary = data.get("summary", st.session_state["current_summary"])  # Retain the previous summary if not updated
+                    st.session_state["current_summary"] = summary  # Update or retain the summary
+                    st.session_state["chat_history"].append({"role": "assistant", "content": summary})
 
-                # Update general response for a generated plan
-                st.session_state["general_response"] = data.get(
-                    "response", "I've generated a plan for you based on your query."
-                )
+                    # Update general response for a generated plan
+                    st.session_state["general_response"] = data.get(
+                        "response", "I've generated a plan for you based on your query."
+                    )
 
-                # Display plan metadata and details
-                if st.session_state["current_plan"]:
-                    with st.expander("Outcomes"):
-                        expected_outcome = st.session_state["current_plan"].get("ExpectedOutcome", "N/A")
-                        st.markdown(f"**Expected Outcome:** {expected_outcome}")
+                    # Display plan metadata and details
+                    if st.session_state["current_plan"]:
+                        with st.expander("Outcomes"):
+                            expected_outcome = st.session_state["current_plan"].get("ExpectedOutcome", "N/A")
+                            st.markdown(f"**Expected Outcome:** {expected_outcome}")
 
-                    # Display Summary
-                    st.markdown("### Summary")
-                    st.text(summary)
+                        # Display Summary
+                        st.markdown("### Summary")
+                        st.text(summary)
 
-                    # Display Module Tabs
-                    modules = st.session_state["current_plan"].get("Modules", [])
-                    if modules:
-                        module_tabs = [f"Module {module['module']}" for module in modules]
-                        tab_containers = st.tabs(module_tabs)
+                        # Display Module Tabs
+                        modules = st.session_state["current_plan"].get("Modules", [])
+                        if modules:
+                            module_tabs = [f"Module {module['module']}" for module in modules]
+                            tab_containers = st.tabs(module_tabs)
 
-                        for i, tab in enumerate(tab_containers):
-                            with tab:
-                                module = modules[i]
-                                st.markdown(f"#### {module['title']}")
-                                st.write(module['description'])
+                            for i, tab in enumerate(tab_containers):
+                                with tab:
+                                    module = modules[i]
+                                    st.markdown(f"#### {module['title']}")
+                                    st.write(module['description'])
 
-                    # Display Key Topics
-                    st.markdown("### Key Topics")
-                    for topic in st.session_state["current_plan"].get("KeyTopics", []):
-                        st.write(f"- {topic}")
+                        # Display Key Topics
+                        st.markdown("### Key Topics")
+                        for topic in st.session_state["current_plan"].get("KeyTopics", []):
+                            st.write(f"- {topic}")
 
-            # Handle fallback response if no plan is available
-            elif data.get("response"):
-                st.session_state["general_response"] = data["response"]
-                st.session_state["chat_history"].append({"role": "assistant", "content": data["response"]})
+                # Handle fallback response if no plan is available
+                elif data.get("response"):
+                    st.session_state["general_response"] = data["response"]
+                    st.session_state["chat_history"].append({"role": "assistant", "content": data["response"]})
 
+                else:
+                    # Handle the case where no response or plan is provided
+                    st.session_state["general_response"] = "Failed to fetch the learning plan details."
+                    st.error("Failed to fetch the learning plan details.")
             else:
-                # Handle the case where no response or plan is provided
-                st.session_state["general_response"] = "Failed to fetch the learning plan details."
-                st.error("Failed to fetch the learning plan details.")
-        else:
-            # Handle error responses from the backend
-            st.session_state["general_response"] = "Failed to process the query. Please try again later."
-            st.error("Failed to process the query. Please try again later.")
+                # Handle error responses from the backend
+                st.session_state["general_response"] = "Failed to process the query. Please try again later."
+                st.error("Failed to process the query. Please try again later.")
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
     # Add Save Plan to Database functionality
     if st.session_state["current_plan"]:
@@ -108,13 +114,14 @@ def main():
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],
                     },
-                    params={"username": username},  # Include username when saving the plan
+                    headers={"Authorization": f"Bearer {access_token}"},  # Include token
                 )
 
                 if save_response.status_code == 200:
                     st.session_state["save_status"] = f"Plan saved successfully. Plan ID: {save_response.json().get('plan_id')}"
                 else:
                     st.session_state["save_status"] = f"Failed to save plan: {save_response.json().get('detail', 'Unknown error')}"
+
             except Exception as e:
                 st.session_state["save_status"] = f"An error occurred while saving the plan: {e}"
 

@@ -137,7 +137,7 @@ def create_user(username: str, password: str):
 def inspect_index():
     results = index.query(vector=[0] * 1536, top_k=10, include_metadata=True)
     return results
-    
+
 # Dependency for extracting username from the token
 async def get_current_username(token: str = Depends(oauth2_scheme)):
     try:
@@ -318,7 +318,13 @@ async def login(username: str = Query(...), password: str = Query(...)):
     if not user or not verify_password(password, user["password"]):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     access_token = create_access_token(data={"sub": username})
+    return {"access_token": access_token, "token_type": "bearer", "username": username}
+
+@app.post("/refresh_token")
+async def refresh_token(username: str = Depends(get_current_username)):
+    access_token = create_access_token(data={"sub": username})
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 @app.post("/query")
 async def query_router(request: dict):
@@ -494,7 +500,6 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
     finally:
         cursor.close()
         connection.close()
-
 
 @app.get("/get_plans")
 def get_plans():

@@ -6,6 +6,13 @@ import json
 def main():
     st.title("Planner")
 
+    # Ensure username is available in session state
+    if "username" not in st.session_state:
+        st.error("You are not logged in. Please log in to create or view plans.")
+        return
+
+    username = st.session_state["username"]
+
     # Initialize chat history, current plan, save status, and fallback response if not present
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
@@ -53,26 +60,24 @@ def main():
                 # Display plan metadata and details
                 if st.session_state["current_plan"]:
                     with st.expander("Outcomes"):
-                        timeline = st.session_state["current_plan"].get("Timeline", "N/A")
                         expected_outcome = st.session_state["current_plan"].get("ExpectedOutcome", "N/A")
-                        st.markdown(f"**Timeline:** {timeline}")
                         st.markdown(f"**Expected Outcome:** {expected_outcome}")
 
                     # Display Summary
                     st.markdown("### Summary")
                     st.text(summary)
 
-                    # Display Weekly Tabs
-                    weeks = st.session_state["current_plan"].get("Weeks", [])
-                    if weeks:
-                        week_tabs = [week["week"] for week in weeks]
-                        tab_containers = st.tabs(week_tabs)
+                    # Display Module Tabs
+                    modules = st.session_state["current_plan"].get("Modules", [])
+                    if modules:
+                        module_tabs = [f"Module {module['module']}" for module in modules]
+                        tab_containers = st.tabs(module_tabs)
 
                         for i, tab in enumerate(tab_containers):
                             with tab:
-                                week = weeks[i]
-                                st.markdown(f"#### {week['title']}")
-                                st.write(week['details'])
+                                module = modules[i]
+                                st.markdown(f"#### {module['title']}")
+                                st.write(module['description'])
 
                     # Display Key Topics
                     st.markdown("### Key Topics")
@@ -103,6 +108,7 @@ def main():
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],
                     },
+                    params={"username": username},  # Include username when saving the plan
                 )
 
                 if save_response.status_code == 200:
@@ -120,7 +126,6 @@ def main():
     if st.button("View Saved Plans"):
         st.session_state["page"] = "plans"  # Update current page to "plans"
         st.rerun()  # Trigger rerun to load the new page
-
 
     # Display the general response in another text area
     st.text_area(

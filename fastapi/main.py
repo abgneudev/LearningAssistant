@@ -15,6 +15,8 @@ import json
 import logging
 import logging
 from fastapi.logger import logger as fastapi_logger
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 fastapi_logger.setLevel(logging.INFO)
@@ -135,6 +137,17 @@ def create_user(username: str, password: str):
 def inspect_index():
     results = index.query(vector=[0] * 1536, top_k=10, include_metadata=True)
     return results
+    
+# Dependency for extracting username from the token
+async def get_current_username(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        return username
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 # Utility Functions (unchanged from your original code)
 def get_embedding(text, model="text-embedding-ada-002"):
@@ -181,18 +194,17 @@ def generate_plan(user_query, context_info, current_plan=None):
 
         system_prompt = (
             "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
-            "Focus on clear objectives, key topics, step-by-step actions, a realistic timeline, and clear expected outcomes. "
+            "Focus on clear objectives, key topics, step-by-step actions, and clear expected outcomes. "
             "If the query refers to updating an existing plan, modify only the relevant sections to reflect the user's request. "
             "Do not include any explanations or comments. Return only valid JSON output in this format:\n"
             "{\n"
             '  "Objective": "...",\n'
             '  "KeyTopics": ["...", "..."],\n'
-            '  "Weeks": [\n'
-            '    {"week": "Week 1", "title": "...", "details": "..."},\n'
-            '    {"week": "Week 2", "title": "...", "details": "..."},\n'
+            '  "Modules": [\n'
+            '    {"module": 1, "title": "...", "description": "..."},\n'
+            '    {"module": 2, "title": "...", "description": "..."},\n'
             "    ...\n"
             "  ],\n"
-            '  "Timeline": "...",\n'
             '  "ExpectedOutcome": "..."'
             "\n}"
         )
@@ -238,7 +250,6 @@ def generate_plan(user_query, context_info, current_plan=None):
         return '{"error": "Plan generation failed due to an internal error."}'
 
 
-
 def validate_and_clean_json(response_text):
     try:
         start_idx = response_text.find("{")
@@ -249,6 +260,17 @@ def validate_and_clean_json(response_text):
 
         json_text = response_text[start_idx:end_idx]
         plan = json.loads(json_text)
+
+        # Ensure Modules are present and valid
+        if "Modules" in plan:
+            if not isinstance(plan["Modules"], list):
+                logging.error("Modules validation failed: Modules must be a list.")
+                return None
+            for module in plan["Modules"]:
+                if not all(key in module for key in ["module", "title", "description"]):
+                    logging.error("Modules validation failed: Each module must have 'module', 'title', and 'description'.")
+                    return None
+
         logging.info("Validated and cleaned JSON: %s", plan)
         return plan
     except json.JSONDecodeError as e:
@@ -258,7 +280,6 @@ def validate_and_clean_json(response_text):
     except Exception as e:
         logging.error("Unexpected error during JSON validation: %s", str(e))
         return None
-
 
 def summarize_plan(plan):
     summary_response = client.chat.completions.create(
@@ -421,10 +442,11 @@ async def query_router(request: dict):
     logging.info("Final response data: %s", response_data)
     return response_data
 
+
 @app.post("/save_plan")
-async def save_plan(request: dict):
+async def save_plan(request: dict, username: str = Depends(get_current_username)):
     """
-    Save the learning plan and weekly details to Snowflake.
+    Save the learning plan and module details to Snowflake.
     """
     plan = request.get("plan")
     summary = request.get("summary")
@@ -438,29 +460,29 @@ async def save_plan(request: dict):
 
         # Insert plan into the database
         plan_id = plan.get("PlanID", str(datetime.utcnow().timestamp()))
-        timeline = plan.get("Timeline", "N/A")
-        expected_outcome = plan.get("ExpectedOutcome", "N/A")
         key_topics = json.dumps(plan.get("KeyTopics", []))
+        learning_outcomes = plan.get("LearningOutcomes", "N/A")  # Include learning outcomes
 
         cursor.execute(
             """
-            INSERT INTO plans (plan_id, summary, key_topics, learning_outcomes, timeline)
+            INSERT INTO PLANS (PLAN_ID, USERNAME, SUMMARY, KEY_TOPICS, LEARNING_OUTCOMES)
             VALUES (%s, %s, %s, %s, %s)
             """,
-            (plan_id, summary, key_topics, expected_outcome, timeline)
+            (plan_id, username, summary, key_topics, learning_outcomes)
         )
 
-        # Insert weekly details
-        for week in plan.get("Weeks", []):
-            week_id = week.get("WeekID", str(datetime.utcnow().timestamp()))
-            week_title = week.get("title", "No Title")
-            week_details = week.get("details", "No Details")
+        # Insert module details
+        for module in plan.get("Modules", []):  # Rename "Weeks" to "Modules"
+            module_id = module.get("ModuleID", str(datetime.utcnow().timestamp()))
+            module_number = module.get("module", 0)
+            title = module.get("title", "No Title")
+            description = module.get("description", "No Description")
             cursor.execute(
                 """
-                INSERT INTO weeks (week_id, plan_id, week, title, description)
+                INSERT INTO MODULES (MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
-                (week_id, plan_id, week["week"], week_title, week_details)
+                (module_id, plan_id, module_number, title, description)
             )
 
         connection.commit()
@@ -480,14 +502,13 @@ def get_plans():
     try:
         cursor = connection.cursor()
         # Include `learning_outcomes` in the SELECT query
-        cursor.execute("SELECT plan_id, summary, key_topics, learning_outcomes, timeline FROM plans")
+        cursor.execute("SELECT plan_id, summary, key_topics, learning_outcomes FROM plans")
         plans = [
             {
                 "plan_id": row[0],
                 "summary": row[1],
                 "key_topics": json.loads(row[2]) if row[2] else [],
-                "learning_outcomes": row[3],  # Add this line to include learning outcomes
-                "timeline": row[4],
+                "learning_outcomes": row[3]  # Add this line to include learning outcomes
             }
             for row in cursor.fetchall()
         ]
@@ -504,37 +525,38 @@ def get_plans():
         cursor.close()
         connection.close()
 
-@app.get("/get_weeks/{plan_id}")
-def get_weeks(plan_id: str):
+@app.get("/get_modules/{plan_id}")
+def get_modules(plan_id: str):
     connection = get_db_connection()
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT week_id, plan_id, week, title, description FROM weeks WHERE plan_id = %s", 
+            "SELECT MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION FROM MODULES WHERE PLAN_ID = %s", 
             (plan_id,)
         )
-        weeks = cursor.fetchall()
+        modules = cursor.fetchall()
 
-        if not weeks:
-            logging.warning(f"No weeks found for plan_id: {plan_id}")
-            return {"message": f"No weeks available for plan ID: {plan_id}"}
+        if not modules:
+            logging.warning(f"No modules found for plan_id: {plan_id}")
+            return {"message": f"No modules available for plan ID: {plan_id}"}
 
         return [
             {
-                "week_id": row[0],
+                "module_id": row[0],
                 "plan_id": row[1],
-                "week": row[2],
+                "module": row[2],
                 "title": row[3],
                 "description": row[4],
             }
-            for row in weeks
+            for row in modules
         ]
     except Exception as e:
-        logging.error(f"Error fetching weeks for plan_id {plan_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch weeks")
+        logging.error(f"Error fetching modules for plan_id {plan_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch modules")
     finally:
         cursor.close()
         connection.close()
+
 
 @app.get("/")
 async def root():

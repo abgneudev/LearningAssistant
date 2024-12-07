@@ -194,10 +194,11 @@ def generate_plan(user_query, context_info, current_plan=None):
 
         system_prompt = (
             "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
-            "Focus on clear objectives, key topics, step-by-step actions, and clear expected outcomes. "
+            "Focus on clear objectives, key topics, step-by-step actions, a concise title summarizing the plan, and clear expected outcomes. "
             "If the query refers to updating an existing plan, modify only the relevant sections to reflect the user's request. "
-            "Do not include any explanations or comments. Return only valid JSON output in this format:\n"
+            "Return only valid JSON output in this format:\n"
             "{\n"
+            '  "Title": "...",\n'
             '  "Objective": "...",\n'
             '  "KeyTopics": ["...", "..."],\n'
             '  "Modules": [\n'
@@ -223,31 +224,26 @@ def generate_plan(user_query, context_info, current_plan=None):
                 "Create a new structured learning plan based on the query and context."
             )
 
-        # Log the user prompt for debugging
         logging.debug("User prompt: %s", user_prompt)
 
         plan_response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )
 
         logging.debug("Plan response: %s", plan_response)
 
-        # Clean and validate JSON response
         plan_content = plan_response.choices[0].message.content
         logging.info("Raw Generated Plan: %s", plan_content)
 
-        # Strip trailing commas (fix invalid JSON)
-        plan_content = plan_content.replace(",\n  ]", "\n  ]").replace(",\n}", "\n}")
-
+        plan_content = plan_content.replace(",\n  ]", "\n  ]").replace(",\n}", "\n}")  # Fix invalid JSON
         logging.info("Cleaned Plan: %s", plan_content)
+
         return plan_content
     except Exception as e:
         logging.error("Error in generate_plan: %s", str(e))
         return '{"error": "Plan generation failed due to an internal error."}'
+
 
 
 def validate_and_clean_json(response_text):
@@ -466,29 +462,30 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
 
         # Insert plan into the database
         plan_id = plan.get("PlanID", str(datetime.utcnow().timestamp()))
+        title = plan.get("Title", "Untitled Plan")  # Retrieve title from the plan
         key_topics = json.dumps(plan.get("KeyTopics", []))
-        learning_outcomes = plan.get("ExpectedOutcome", "N/A")  # Include learning outcomes
+        learning_outcomes = plan.get("ExpectedOutcome", "N/A")
 
         cursor.execute(
             """
-            INSERT INTO PLANS (PLAN_ID, USERNAME, SUMMARY, KEY_TOPICS, LEARNING_OUTCOMES)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO PLANS (PLAN_ID, USERNAME, TITLE, SUMMARY, KEY_TOPICS, LEARNING_OUTCOMES)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (plan_id, username, summary, key_topics, learning_outcomes)
+            (plan_id, username, title, summary, key_topics, learning_outcomes)
         )
 
         # Insert module details
-        for module in plan.get("Modules", []):  # Rename "Weeks" to "Modules"
+        for module in plan.get("Modules", []):
             module_id = module.get("ModuleID", str(datetime.utcnow().timestamp()))
             module_number = module.get("module", 0)
-            title = module.get("title", "No Title")
+            module_title = module.get("title", "No Title")
             description = module.get("description", "No Description")
             cursor.execute(
                 """
                 INSERT INTO MODULES (MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
-                (module_id, plan_id, module_number, title, description)
+                (module_id, plan_id, module_number, module_title, description)
             )
 
         connection.commit()
@@ -501,6 +498,7 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
         cursor.close()
         connection.close()
 
+
 @app.get("/get_plans")
 def get_plans(username: str = Depends(get_current_username)):
     """
@@ -509,10 +507,9 @@ def get_plans(username: str = Depends(get_current_username)):
     connection = get_db_connection()
     try:
         cursor = connection.cursor()
-        # Query only the plans associated with the current user
         cursor.execute(
             """
-            SELECT plan_id, summary, key_topics, learning_outcomes
+            SELECT plan_id, title, summary, key_topics, learning_outcomes
             FROM plans
             WHERE username = %s
             """,
@@ -521,9 +518,10 @@ def get_plans(username: str = Depends(get_current_username)):
         plans = [
             {
                 "plan_id": row[0],
-                "summary": row[1],
-                "key_topics": json.loads(row[2]) if row[2] else [],
-                "learning_outcomes": row[3],  # Add this line to include learning outcomes
+                "title": row[1],  # Include the title in the response
+                "summary": row[2],
+                "key_topics": json.loads(row[3]) if row[3] else [],
+                "learning_outcomes": row[4],
             }
             for row in cursor.fetchall()
         ]
@@ -539,6 +537,7 @@ def get_plans(username: str = Depends(get_current_username)):
     finally:
         cursor.close()
         connection.close()
+
 
 
 @app.get("/get_modules/{plan_id}")

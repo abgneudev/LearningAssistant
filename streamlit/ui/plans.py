@@ -41,7 +41,7 @@ def main():
         return
 
     # Dropdown to select a plan
-    plan_options = {plan["plan_id"]: plan["summary"] for plan in plans}
+    plan_options = {plan["plan_id"]: plan["title"] for plan in plans}
     selected_plan_id = st.selectbox(
         "Select a Plan",
         options=plan_options.keys(),
@@ -51,10 +51,13 @@ def main():
     # Display selected plan details
     if selected_plan_id:
         selected_plan = next((plan for plan in plans if plan["plan_id"] == selected_plan_id), None)
-        
+
         if not selected_plan:
             st.error("Selected plan could not be found.")
             return
+
+        st.markdown(f"### Plan Title")
+        st.write(selected_plan["title"])
 
         st.markdown(f"### Plan Summary")
         st.write(selected_plan["summary"])

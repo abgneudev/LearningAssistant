@@ -62,6 +62,10 @@ def main():
 
                     # Display plan metadata and details
                     if st.session_state["current_plan"]:
+                        # Display the Plan Title
+                        plan_title = st.session_state["current_plan"].get("Title", "Untitled Plan")
+                        st.markdown(f"## {plan_title}")
+
                         with st.expander("Outcomes"):
                             expected_outcome = st.session_state["current_plan"].get("ExpectedOutcome", "N/A")
                             st.markdown(f"**Expected Outcome:** {expected_outcome}")
@@ -87,11 +91,6 @@ def main():
                                     module = modules[i]
                                     st.markdown(f"#### {module['title']}")
                                     st.write(module['description'])
-
-                        # # Display Key Topics
-                        # st.markdown("### Key Topics")
-                        # for topic in st.session_state["current_plan"].get("KeyTopics", []):
-                        #     st.write(f"- {topic}")
 
                 # Handle fallback response if no plan is available
                 elif data.get("response"):

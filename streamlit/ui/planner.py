@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import json
 
-
 def main():
     st.title("Planner")
 
@@ -146,7 +145,6 @@ def main():
         height=200,
         key="general_response_text"
     )
-
 
 if __name__ == "__main__":
     main()

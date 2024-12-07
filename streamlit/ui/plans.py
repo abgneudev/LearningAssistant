@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 
-
 def main():
     st.title("Saved Plans")
 
@@ -101,7 +100,6 @@ def main():
                     st.session_state["selected_module_id"] = module["module_id"]
                     st.session_state["page"] = "lesson"
                     st.rerun()
-
 
 if __name__ == "__main__":
     main()

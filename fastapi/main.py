@@ -1,28 +1,19 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
+import os
+from dotenv import load_dotenv
+import json
 from typing import Optional
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import snowflake.connector
-import os
-from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 import tiktoken
-import json
-import logging
-import logging
-from fastapi.logger import logger as fastapi_logger
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-fastapi_logger.setLevel(logging.INFO)
-
-
-# Load environment variables
 load_dotenv()
 
 # Initialize clients
@@ -163,11 +154,8 @@ def get_embedding(text, model="text-embedding-ada-002"):
 
 def retrieve_information(user_query):
     try:
-        logging.info("Retrieving information for query: %s", user_query)
         query_embedding = get_embedding(user_query)
         results = index.query(vector=query_embedding, top_k=4, include_metadata=True)
-
-        logging.debug("Query results: %s", results)
 
         RELEVANCE_THRESHOLD = 0.8
         relevant_matches = [
@@ -175,21 +163,17 @@ def retrieve_information(user_query):
         ]
 
         if not relevant_matches:
-            logging.info("No relevant matches found for query: %s", user_query)
             return None
 
-        logging.info("Relevant matches found: %s", relevant_matches)
         context_info = " ".join([f"Chunk ID: {match['metadata'].get('chunk_id', 'Unknown')}. Text: {match['metadata'].get('text', '').strip()}"
                                for match in relevant_matches])
         return context_info
     except Exception as e:
-        logging.error("Error in retrieve_information: %s", str(e))
         raise HTTPException(status_code=500, detail="Internal Server Error during information retrieval")
 
 def generate_plan(user_query, context_info, current_plan=None):
     try:
         if not context_info and not current_plan:
-            logging.info("No relevant context or existing plan found, skipping plan generation")
             return "No relevant information found in the Knowledge Base"
 
         system_prompt = (
@@ -224,34 +208,24 @@ def generate_plan(user_query, context_info, current_plan=None):
                 "Create a new structured learning plan based on the query and context."
             )
 
-        logging.debug("User prompt: %s", user_prompt)
-
         plan_response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )
 
-        logging.debug("Plan response: %s", plan_response)
-
         plan_content = plan_response.choices[0].message.content
-        logging.info("Raw Generated Plan: %s", plan_content)
 
         plan_content = plan_content.replace(",\n  ]", "\n  ]").replace(",\n}", "\n}")  # Fix invalid JSON
-        logging.info("Cleaned Plan: %s", plan_content)
 
         return plan_content
     except Exception as e:
-        logging.error("Error in generate_plan: %s", str(e))
         return '{"error": "Plan generation failed due to an internal error."}'
-
-
 
 def validate_and_clean_json(response_text):
     try:
         start_idx = response_text.find("{")
         end_idx = response_text.rfind("}") + 1
         if start_idx == -1 or end_idx == -1:
-            logging.error("JSON validation failed: No JSON object found in response.")
             return None
 
         json_text = response_text[start_idx:end_idx]
@@ -260,21 +234,15 @@ def validate_and_clean_json(response_text):
         # Ensure Modules are present and valid
         if "Modules" in plan:
             if not isinstance(plan["Modules"], list):
-                logging.error("Modules validation failed: Modules must be a list.")
                 return None
             for module in plan["Modules"]:
                 if not all(key in module for key in ["module", "title", "description"]):
-                    logging.error("Modules validation failed: Each module must have 'module', 'title', and 'description'.")
                     return None
 
-        logging.info("Validated and cleaned JSON: %s", plan)
         return plan
     except json.JSONDecodeError as e:
-        logging.error("Error decoding JSON: %s", str(e))
-        logging.error("Raw JSON Response: %s", response_text)
         return None
     except Exception as e:
-        logging.error("Unexpected error during JSON validation: %s", str(e))
         return None
 
 def summarize_plan(plan):
@@ -300,7 +268,7 @@ def summarize_plan(plan):
     )
     return summary_response.choices[0].message.content
 
-# API Endpoints
+# ---  API Endpoints  ---
 @app.post("/signup")
 async def signup(username: str = Query(...), password: str = Query(...)):
     if get_user(username):
@@ -321,7 +289,6 @@ async def refresh_token(username: str = Depends(get_current_username)):
     access_token = create_access_token(data={"sub": username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-
 @app.post("/query")
 async def query_router(request: dict):
     user_query = request.get("user_query")
@@ -330,8 +297,6 @@ async def query_router(request: dict):
 
     if not user_query:
         raise HTTPException(status_code=400, detail="User query is required.")
-
-    logging.info("Processing query: %s", user_query)
 
     # Initialize response object
     response_data = {
@@ -375,10 +340,8 @@ async def query_router(request: dict):
                     "summary": summary,
                     "response": response_text
                 })
-                logging.info("Successfully updated the plan.")
             else:
                 response_data["response"] = "Failed to generate or parse learning plan."
-                logging.error("Plan generation failed. Raw response: %s", learning_plan_json)
 
         elif current_plan:
             # Case 2: Indirectly relevant query or context to refine the plan
@@ -438,12 +401,9 @@ async def query_router(request: dict):
             })
 
     except Exception as e:
-        logging.error("Error processing query: %s", str(e))
         response_data["response"] = "An error occurred while processing your query. Please try again later."
 
-    logging.info("Final response data: %s", response_data)
     return response_data
-
 
 @app.post("/save_plan")
 async def save_plan(request: dict, username: str = Depends(get_current_username)):
@@ -492,12 +452,10 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
         return {"message": "Plan saved successfully.", "plan_id": plan_id}
     except Exception as e:
         connection.rollback()
-        logging.error("Error saving plan: %s", str(e))
         raise HTTPException(status_code=500, detail="An error occurred while saving the plan.")
     finally:
         cursor.close()
         connection.close()
-
 
 @app.get("/get_plans")
 def get_plans(username: str = Depends(get_current_username)):
@@ -527,18 +485,14 @@ def get_plans(username: str = Depends(get_current_username)):
         ]
 
         if not plans:
-            logging.info(f"No plans found for user: {username}")
             return {"message": "No plans available"}
 
         return plans
     except Exception as e:
-        logging.error(f"Error fetching plans: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch plans")
     finally:
         cursor.close()
         connection.close()
-
-
 
 @app.get("/get_modules/{plan_id}")
 def get_modules(plan_id: str):
@@ -552,7 +506,6 @@ def get_modules(plan_id: str):
         modules = cursor.fetchall()
 
         if not modules:
-            logging.warning(f"No modules found for plan_id: {plan_id}")
             return {"message": f"No modules available for plan ID: {plan_id}"}
 
         return [
@@ -566,12 +519,10 @@ def get_modules(plan_id: str):
             for row in modules
         ]
     except Exception as e:
-        logging.error(f"Error fetching modules for plan_id {plan_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch modules")
     finally:
         cursor.close()
         connection.close()
-
 
 @app.get("/")
 async def root():
@@ -579,7 +530,5 @@ async def root():
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    logging.info("Request URL: %s %s", request.method, request.url)
     response = await call_next(request)
-    logging.info("Response status: %s", response.status_code)
     return response

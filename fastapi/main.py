@@ -10,9 +10,12 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import snowflake.connector
+from queue import Queue
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 import tiktoken
+from pydantic import BaseModel, ValidationError
+from typing import List, Dict
 
 load_dotenv()
 
@@ -22,18 +25,25 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
-# Create or get Pinecone index
-INDEX_NAME = "test"
-if INDEX_NAME not in [index["name"] for index in pc.list_indexes()]:
+# Define index parameters
+INDEX_NAME = os.getenv("INDEX_NAME")
+DIMENSION = os.getenv("DIMENSION")
+METRIC = os.getenv("METRIC")
+CLOUD_PROVIDER = os.getenv("CLOUD_PROVIDER")
+REGION = os.getenv("REGION")
+
+# Check if the index exists
+existing_indexes = [idx["name"] for idx in pc.list_indexes()]
+if INDEX_NAME not in existing_indexes:
+    # Create the index if it doesn't exist
     pc.create_index(
         name=INDEX_NAME,
-        dimension=1536,
-        metric="cosine",
-        spec=ServerlessSpec(
-            cloud="aws",
-            region="us-east-1",
-        ),
+        dimension=DIMENSION,
+        metric=METRIC,
+        spec=ServerlessSpec(cloud=CLOUD_PROVIDER, region=REGION),
     )
+
+# Connect to the index
 index = pc.Index(INDEX_NAME)
 
 # Snowflake connection configuration
@@ -49,7 +59,7 @@ SNOWFLAKE_CONFIG = {
 # JWT and security configurations
 SECRET_KEY = os.getenv('SECRET_KEY')
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 15
+ACCESS_TOKEN_EXPIRE_MINUTES = 160
 
 # FastAPI app
 app = FastAPI()
@@ -69,16 +79,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Snowflake database connection
+class Module(BaseModel):
+    module: int
+    title: str
+    description: str
+
+class Plan(BaseModel):
+    Title: str
+    Objective: str
+    KeyTopics: List[str]
+    Modules: List[Module]
+    ExpectedOutcome: str
+
+class SnowflakeConnectionPool:
+    def __init__(self, config, maxsize=10):
+        self.config = config
+        self.pool = Queue(maxsize)
+        for _ in range(maxsize):
+            self.pool.put(self._create_connection())
+
+    def _create_connection(self):
+        return snowflake.connector.connect(
+            user=self.config['user'],
+            password=self.config['password'],
+            account=self.config['account'],
+            warehouse=self.config['warehouse'],
+            database=self.config['database'],
+            schema=self.config['schema'],
+        )
+
+    def get_connection(self):
+        try:
+            return self.pool.get(timeout=10)
+        except Exception:
+            raise HTTPException(status_code=500, detail="No available database connections in the pool.")
+
+    def release_connection(self, connection):
+        try:
+            self.pool.put(connection, timeout=10)
+        except Exception:
+            connection.close()  # Close connection if pool is full
+
+    def close_all_connections(self):
+        while not self.pool.empty():
+            connection = self.pool.get()
+            connection.close()
+
+pool = SnowflakeConnectionPool(SNOWFLAKE_CONFIG, maxsize=10)
+
 def get_db_connection():
-    return snowflake.connector.connect(
-        user=SNOWFLAKE_CONFIG['user'],
-        password=SNOWFLAKE_CONFIG['password'],
-        account=SNOWFLAKE_CONFIG['account'],
-        warehouse=SNOWFLAKE_CONFIG['warehouse'],
-        database=SNOWFLAKE_CONFIG['database'],
-        schema=SNOWFLAKE_CONFIG['schema']
-    )
+    connection = pool.get_connection()
+    return connection
+
 
 # Utility functions
 def get_password_hash(password: str):
@@ -103,31 +155,33 @@ def decode_token(token: str):
 def get_user(username: str):
     connection = get_db_connection()
     try:
-        cursor = connection.cursor()
-        cursor.execute("SELECT USERNAME, PASSWORD, CREATED_AT FROM USERS WHERE USERNAME = %s", (username,))
-        row = cursor.fetchone()
-        return {"username": row[0], "password": row[1], "created_at": row[2]} if row else None
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT USERNAME, PASSWORD, CREATED_AT FROM USERS WHERE USERNAME = %s", (username,))
+            row = cursor.fetchone()
+            return {"username": row[0], "password": row[1], "created_at": row[2]} if row else None
     finally:
-        cursor.close()
-        connection.close()
+        pool.release_connection(connection)  # Ensure the connection is released back to the pool
 
 def create_user(username: str, password: str):
     hashed_password = get_password_hash(password)
     connection = get_db_connection()
     try:
-        cursor = connection.cursor()
-        cursor.execute(
-            """INSERT INTO USERS (USERNAME, PASSWORD, CREATED_AT) VALUES (%s, %s, %s)""",
-            (username, hashed_password, datetime.utcnow())
-        )
-        connection.commit()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO USERS (USERNAME, PASSWORD, CREATED_AT) VALUES (%s, %s, %s)""",
+                (username, hashed_password, datetime.utcnow())
+            )
+            connection.commit()
     finally:
-        cursor.close()
-        connection.close()
+        pool.release_connection(connection)  # Ensure the connection is released back to the pool
 
 def inspect_index():
-    results = index.query(vector=[0] * 1536, top_k=10, include_metadata=True)
-    return results
+    try:
+        results = index.describe_index_stats()
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error inspecting index")
+
 
 # Dependency for extracting username from the token
 async def get_current_username(token: str = Depends(oauth2_scheme)):
@@ -165,11 +219,14 @@ def retrieve_information(user_query):
         if not relevant_matches:
             return None
 
-        context_info = " ".join([f"Chunk ID: {match['metadata'].get('chunk_id', 'Unknown')}. Text: {match['metadata'].get('text', '').strip()}"
-                               for match in relevant_matches])
+        context_info = " ".join([
+            f"Chunk ID: {match['metadata'].get('chunk_id', 'Unknown')}. Text: {match['metadata'].get('text', '').strip()}"
+            for match in relevant_matches
+        ])
         return context_info
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal Server Error during information retrieval")
+        raise HTTPException(status_code=500, detail=f"Error retrieving information: {str(e)}")
+
 
 def generate_plan(user_query, context_info, current_plan=None):
     try:
@@ -177,21 +234,29 @@ def generate_plan(user_query, context_info, current_plan=None):
             return "No relevant information found in the Knowledge Base"
 
         system_prompt = (
-            "You are an assistant that creates specific and actionable MVP-style structured JSON learning plans based on the user's query. "
-            "Focus on clear objectives, key topics, step-by-step actions, a concise title summarizing the plan, and clear expected outcomes. "
-            "If the query refers to updating an existing plan, modify only the relevant sections to reflect the user's request. "
-            "Return only valid JSON output in this format:\n"
+            "You are a highly skilled assistant specializing in crafting structured and actionable MVP-style JSON learning plans that inspire users to learn and achieve their goals. "
+            "Your plans should strike a balance between brevity and depth, providing clear and engaging content that motivates users to progress. "
+            "Descriptions should be intellectual yet accessible, with relatable examples to demonstrate real-world applications and outcomes. "
+            "Each learning plan should include:\n"
+            "- A concise, compelling title that encapsulates the learning journey.\n"
+            "- A clear and motivational objective outlining what the user will accomplish, written in an approachable and inspiring manner.\n"
+            "- Key topics broken into digestible concepts to serve as milestones for learning progress.\n"
+            "- Step-by-step modules with detailed yet exciting descriptions that highlight the value, relevance, and potential real-world impact of each step. Use relatable examples to illustrate key concepts and outcomes.\n"
+            "- A measurable and inspiring expected outcome to give the user a sense of achievement and direction upon completing the plan.\n"
+            "If updating an existing plan, carefully refine the relevant sections based on the user's query while preserving the overall structure and coherence of the plan. "
+            "Strictly return a valid JSON output only. Do not include any introductory text, explanations, or comments. The response should consist solely of the JSON structure in this format:\n"
             "{\n"
-            '  "Title": "...",\n'
-            '  "Objective": "...",\n'
-            '  "KeyTopics": ["...", "..."],\n'
+            '  "Title": "An engaging and concise title for the learning plan",\n'
+            '  "Objective": "A clear, inspiring summary of what the user will achieve",\n'
+            '  "KeyTopics": ["Key topic 1", "Key topic 2", "Key topic 3"],\n'
             '  "Modules": [\n'
-            '    {"module": 1, "title": "...", "description": "..."},\n'
-            '    {"module": 2, "title": "...", "description": "..."},\n'
+            '    {"module": 1, "title": "Catchy module title", "description": "A motivating, easy-to-read, and intellectually stimulating description that highlights the value of this module. Include a relatable example to showcase its practical application."},\n'
+            '    {"module": 2, "title": "Another engaging module title", "description": "An actionable, detailed, and exciting description that keeps users interested and demonstrates the real-world impact of this module through examples."},\n'
             "    ...\n"
             "  ],\n"
-            '  "ExpectedOutcome": "..."'
-            "\n}"
+            '  "ExpectedOutcome": "A clear, measurable, and inspiring outcome to help users stay focused and motivated."\n'
+            "}\n"
+            "Focus on providing content that is practical, motivating, and relatable while ensuring the JSON structure is complete, valid, and error-free. Tailor each plan to the user's query to make the learning journey personal and impactful. Ensure that the output contains only the JSON and nothing else."
         )
 
         if current_plan:
@@ -221,28 +286,12 @@ def generate_plan(user_query, context_info, current_plan=None):
     except Exception as e:
         return '{"error": "Plan generation failed due to an internal error."}'
 
-def validate_and_clean_json(response_text):
+def validate_and_clean_json(response_text: str) -> Optional[dict]:
     try:
-        start_idx = response_text.find("{")
-        end_idx = response_text.rfind("}") + 1
-        if start_idx == -1 or end_idx == -1:
-            return None
-
-        json_text = response_text[start_idx:end_idx]
-        plan = json.loads(json_text)
-
-        # Ensure Modules are present and valid
-        if "Modules" in plan:
-            if not isinstance(plan["Modules"], list):
-                return None
-            for module in plan["Modules"]:
-                if not all(key in module for key in ["module", "title", "description"]):
-                    return None
-
-        return plan
-    except json.JSONDecodeError as e:
-        return None
-    except Exception as e:
+        response_json = json.loads(response_text)
+        plan = Plan(**response_json)
+        return plan.dict()
+    except (ValidationError, json.JSONDecodeError) as e:
         return None
 
 def summarize_plan(plan):
@@ -418,110 +467,114 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
 
     connection = get_db_connection()
     try:
-        cursor = connection.cursor()
+        with connection.cursor() as cursor:
+            # Insert plan into the database
+            plan_id = plan.get("PlanID", str(datetime.utcnow().timestamp()))
+            title = plan.get("Title", "Untitled Plan")
+            key_topics = json.dumps(plan.get("KeyTopics", []))
+            learning_outcomes = plan.get("ExpectedOutcome", "N/A")
 
-        # Insert plan into the database
-        plan_id = plan.get("PlanID", str(datetime.utcnow().timestamp()))
-        title = plan.get("Title", "Untitled Plan")  # Retrieve title from the plan
-        key_topics = json.dumps(plan.get("KeyTopics", []))
-        learning_outcomes = plan.get("ExpectedOutcome", "N/A")
-
-        cursor.execute(
-            """
-            INSERT INTO PLANS (PLAN_ID, USERNAME, TITLE, SUMMARY, KEY_TOPICS, LEARNING_OUTCOMES)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (plan_id, username, title, summary, key_topics, learning_outcomes)
-        )
-
-        # Insert module details
-        for module in plan.get("Modules", []):
-            module_id = module.get("ModuleID", str(datetime.utcnow().timestamp()))
-            module_number = module.get("module", 0)
-            module_title = module.get("title", "No Title")
-            description = module.get("description", "No Description")
             cursor.execute(
                 """
-                INSERT INTO MODULES (MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO PLANS (PLAN_ID, USERNAME, TITLE, SUMMARY, KEY_TOPICS, LEARNING_OUTCOMES)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (module_id, plan_id, module_number, module_title, description)
+                (plan_id, username, title, summary, key_topics, learning_outcomes)
             )
 
-        connection.commit()
-        return {"message": "Plan saved successfully.", "plan_id": plan_id}
+            # Insert module details
+            for module in plan.get("Modules", []):
+                module_id = module.get("ModuleID", str(datetime.utcnow().timestamp()))
+                module_number = module.get("module", 0)
+                module_title = module.get("title", "No Title")
+                description = module.get("description", "No Description")
+                cursor.execute(
+                    """
+                    INSERT INTO MODULES (MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (module_id, plan_id, module_number, module_title, description)
+                )
+
+            connection.commit()
+            return {"message": "Plan saved successfully.", "plan_id": plan_id}
     except Exception as e:
         connection.rollback()
         raise HTTPException(status_code=500, detail="An error occurred while saving the plan.")
     finally:
-        cursor.close()
         connection.close()
 
 @app.get("/get_plans")
-def get_plans(username: str = Depends(get_current_username)):
+def get_plans(username: str = Depends(get_current_username), page: int = 1, size: int = 10):
     """
-    Fetch all plans for the currently logged-in user.
+    Fetch paginated plans for the currently logged-in user.
     """
     connection = get_db_connection()
     try:
-        cursor = connection.cursor()
-        cursor.execute(
-            """
-            SELECT plan_id, title, summary, key_topics, learning_outcomes
-            FROM plans
-            WHERE username = %s
-            """,
-            (username,),
-        )
-        plans = [
-            {
-                "plan_id": row[0],
-                "title": row[1],  # Include the title in the response
-                "summary": row[2],
-                "key_topics": json.loads(row[3]) if row[3] else [],
-                "learning_outcomes": row[4],
-            }
-            for row in cursor.fetchall()
-        ]
+        offset = (page - 1) * size
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT plan_id, title, summary, key_topics, learning_outcomes
+                FROM plans
+                WHERE username = %s
+                LIMIT %s OFFSET %s
+                """,
+                (username, size, offset),
+            )
+            plans = [
+                {
+                    "plan_id": row[0],
+                    "title": row[1],
+                    "summary": row[2],
+                    "key_topics": json.loads(row[3]) if row[3] else [],
+                    "learning_outcomes": row[4],
+                }
+                for row in cursor.fetchall()
+            ]
 
-        if not plans:
-            return {"message": "No plans available"}
+            if not plans:
+                return {"message": "No plans available"}
 
-        return plans
+            return plans
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch plans")
     finally:
-        cursor.close()
         connection.close()
 
 @app.get("/get_modules/{plan_id}")
-def get_modules(plan_id: str):
+def get_modules(plan_id: str, page: int = 1, size: int = 10):
     connection = get_db_connection()
     try:
-        cursor = connection.cursor()
-        cursor.execute(
-            "SELECT MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION FROM MODULES WHERE PLAN_ID = %s", 
-            (plan_id,)
-        )
-        modules = cursor.fetchall()
+        offset = (page - 1) * size
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION
+                FROM MODULES
+                WHERE PLAN_ID = %s
+                LIMIT %s OFFSET %s
+                """,
+                (plan_id, size, offset)
+            )
+            modules = cursor.fetchall()
 
-        if not modules:
-            return {"message": f"No modules available for plan ID: {plan_id}"}
+            if not modules:
+                return {"message": f"No modules available for plan ID: {plan_id}"}
 
-        return [
-            {
-                "module_id": row[0],
-                "plan_id": row[1],
-                "module": row[2],
-                "title": row[3],
-                "description": row[4],
-            }
-            for row in modules
-        ]
+            return [
+                {
+                    "module_id": row[0],
+                    "plan_id": row[1],
+                    "module": row[2],
+                    "title": row[3],
+                    "description": row[4],
+                }
+                for row in modules
+            ]
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch modules")
     finally:
-        cursor.close()
         connection.close()
 
 @app.get("/")
@@ -532,3 +585,7 @@ async def root():
 async def log_requests(request, call_next):
     response = await call_next(request)
     return response
+
+@app.on_event("shutdown")
+async def close_connection_pool():
+    pool.close_all_connections()

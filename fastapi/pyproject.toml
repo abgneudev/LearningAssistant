@@ -6,13 +6,15 @@ authors = ["dhirthacker7neu <thacker.dh@northeastern.edu>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.14"  # Adjusting the Python version to match the dependency
 fastapi = "^0.115.5"
 python-dotenv = "^1.0.1"
-snowflake-connector-python = "^3.12.3"
 passlib = "^1.7.4"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 uvicorn = "^0.32.1"
+snowflake-connector-python = "^3.12.4"
+google-api-python-client = "^2.154.0"
+youtube-transcript-api = "^0.6.3"
 
 
 [build-system]

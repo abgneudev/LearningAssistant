@@ -6,9 +6,40 @@ from fastapi import HTTPException
 from openai import OpenAI
 from pinecone import Pinecone
 import tiktoken
+from utils import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    decode_token,
+    get_db_connection,
+    get_current_username,
+    get_user,
+    create_user,
+    inspect_index,
+    YouTubeVideoResponse,
+    Module,
+    Plan,
+    pool,
+)  
 from config import (
+    SNOWFLAKE_CONFIG,
+    OPENAI_API_KEY,
+    PINECONE_API_KEY,
+    YOUTUBE_API_KEY,
+    INDEX_NAME,
+    YOUTUBE_INDEX,
+    DIMENSION,
+    METRIC,
+    CLOUD_PROVIDER,
+    REGION,
+    SECRET_KEY,
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
     client,
+    pc,
+    youtube,
     index,
+    youtube_index,
 )
 
 def get_embedding(text, model="text-embedding-ada-002"):

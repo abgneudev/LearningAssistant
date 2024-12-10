@@ -6,6 +6,7 @@ from syllabus import (
     generate_plan,
     validate_and_clean_json,
     summarize_plan,
+    get_embedding,
 )
 from lessons import (
     retrieve_detailed_explanation,

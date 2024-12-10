@@ -16,17 +16,27 @@ from pinecone import Pinecone, ServerlessSpec
 import tiktoken
 from pydantic import BaseModel, ValidationError
 from typing import List, Dict
+from googleapiclient.discovery import build
+import logging
+
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import TextFormatter
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize clients
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 pc = Pinecone(api_key=PINECONE_API_KEY)
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 # Define index parameters
 INDEX_NAME = os.getenv("INDEX_NAME")
+YOUTUBE_INDEX = os.getenv("YOUTUBE_INDEX")
 DIMENSION = os.getenv("DIMENSION")
 METRIC = os.getenv("METRIC")
 CLOUD_PROVIDER = os.getenv("CLOUD_PROVIDER")
@@ -45,6 +55,17 @@ if INDEX_NAME not in existing_indexes:
 
 # Connect to the index
 index = pc.Index(INDEX_NAME)
+
+if YOUTUBE_INDEX not in existing_indexes:
+    # Create the YouTube index if it doesn't exist
+    pc.create_index(
+        name=YOUTUBE_INDEX,
+        dimension=DIMENSION,  # Same dimension as embeddings
+        metric=METRIC,
+        spec=ServerlessSpec(cloud=CLOUD_PROVIDER, region=REGION),
+    )
+
+youtube_index = pc.Index(YOUTUBE_INDEX)
 
 # Snowflake connection configuration
 SNOWFLAKE_CONFIG = {
@@ -131,6 +152,8 @@ def get_db_connection():
     connection = pool.get_connection()
     return connection
 
+
+# Utility functions
 def get_password_hash(password: str):
     return pwd_context.hash(password)
 
@@ -151,49 +174,27 @@ def decode_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 def get_user(username: str):
-    conn = get_db_connection()
+    connection = get_db_connection()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT USERNAME, PASSWORD, CREATED_AT FROM USERS WHERE USERNAME = %s",
-            (username,),
-        )
-        result = cur.fetchone()
-        if result:
-            return {
-                "username": result[0],
-                "password": result[1],
-                "created_at": result[2],
-            }
-        return None
-    except Exception as e:
-        print(f"Error while fetching user '{username}': {e}")
-        return None
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT USERNAME, PASSWORD, CREATED_AT FROM USERS WHERE USERNAME = %s", (username,))
+            row = cursor.fetchone()
+            return {"username": row[0], "password": row[1], "created_at": row[2]} if row else None
     finally:
-        pool.release_connection(conn)
+        pool.release_connection(connection)  # Ensure the connection is released back to the pool
 
 def create_user(username: str, password: str):
     hashed_password = get_password_hash(password)
-    conn = get_db_connection()
+    connection = get_db_connection()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO USERS (USERNAME, PASSWORD, CREATED_AT)
-            VALUES (%s, %s, %s)
-            """,
-            (username, hashed_password, datetime.utcnow()),
-        )
-        conn.commit()
-        print(f"User '{username}' created successfully.")
-    except Exception as e:
-        conn.rollback()
-        print(f"Failed to create user '{username}': {e}")
-        raise HTTPException(
-            status_code=500, detail="An error occurred while creating the user."
-        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO USERS (USERNAME, PASSWORD, CREATED_AT) VALUES (%s, %s, %s)""",
+                (username, hashed_password, datetime.utcnow())
+            )
+            connection.commit()
     finally:
-        pool.release_connection(conn)
+        pool.release_connection(connection)  # Ensure the connection is released back to the pool
 
 def inspect_index():
     try:
@@ -201,6 +202,7 @@ def inspect_index():
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error inspecting index")
+
 
 # Dependency for extracting username from the token
 async def get_current_username(token: str = Depends(oauth2_scheme)):
@@ -213,62 +215,39 @@ async def get_current_username(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
+# Utility Functions (unchanged from your original code)
 def get_embedding(text, model="text-embedding-ada-002"):
-    try:
-        # Tokenize text
-        encoding = tiktoken.encoding_for_model(model)
-        tokens = encoding.encode(text)
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(text)
+    MAX_TOKENS = 8192
 
-        # Handle token length limits
-        MAX_TOKENS = 8192
-        if len(tokens) > MAX_TOKENS:
-            print("Input text exceeds token limit, truncating...")
-            text = encoding.decode(tokens[:MAX_TOKENS])
+    if len(tokens) > MAX_TOKENS:
+        text = encoding.decode(tokens[:MAX_TOKENS])
 
-        # Generate embedding
-        response = client.embeddings.create(input=text, model=model)
-        embedding = response.data[0].embedding
-        return embedding
-    except Exception as e:
-        print(f"Error during embedding generation: {e}")
-        raise HTTPException(
-            status_code=500, detail="Error generating embedding for the input text."
-        )
+    response = client.embeddings.create(input=text, model=model)
+    return response.data[0].embedding
 
 def retrieve_information(user_query):
     try:
         query_embedding = get_embedding(user_query)
+        results = index.query(vector=query_embedding, top_k=4, include_metadata=True)
 
-        # Perform vector search
-        results = index.query(
-            vector=query_embedding, top_k=4, include_metadata=True
-        )
-
-        # Filter for relevance
         RELEVANCE_THRESHOLD = 0.8
         relevant_matches = [
-            match for match in results["matches"] if match.get("score", 0) >= RELEVANCE_THRESHOLD
+            match for match in results["matches"] if match.get('score', 0) >= RELEVANCE_THRESHOLD
         ]
 
         if not relevant_matches:
-            print("No relevant matches found in the knowledge base.")
             return None
 
-        # Prepare context from relevant matches
-        context_info = " ".join(
-            [
-                f"Chunk ID: {match['metadata'].get('chunk_id', 'Unknown')}. "
-                f"Text: {match['metadata'].get('text', '').strip()}"
-                for match in relevant_matches
-            ]
-        )
+        context_info = " ".join([
+            f"Chunk ID: {match['metadata'].get('chunk_id', 'Unknown')}. Text: {match['metadata'].get('text', '').strip()}"
+            for match in relevant_matches
+        ])
         return context_info
-
     except Exception as e:
-        print(f"Error during information retrieval: {e}")
-        raise HTTPException(
-            status_code=500, detail="Error retrieving information from the knowledge base."
-        )
+        raise HTTPException(status_code=500, detail=f"Error retrieving information: {str(e)}")
+
 
 def generate_plan(user_query, context_info, current_plan=None):
     try:
@@ -285,7 +264,6 @@ def generate_plan(user_query, context_info, current_plan=None):
             "- Key topics broken into digestible concepts to serve as milestones for learning progress.\n"
             "- Step-by-step modules with detailed yet exciting descriptions that highlight the value, relevance, and potential real-world impact of each step. Use relatable examples to illustrate key concepts and outcomes.\n"
             "- A measurable and inspiring expected outcome to give the user a sense of achievement and direction upon completing the plan.\n"
-            "Modules should be logically progressive, meaning each module builds on the previous one conceptually, leading to a smooth and intuitive learning experience.\n"
             "If updating an existing plan, carefully refine the relevant sections based on the user's query while preserving the overall structure and coherence of the plan. "
             "Strictly return a valid JSON output only. Do not include any introductory text, explanations, or comments. The response should consist solely of the JSON structure in this format:\n"
             "{\n"
@@ -299,7 +277,7 @@ def generate_plan(user_query, context_info, current_plan=None):
             "  ],\n"
             '  "ExpectedOutcome": "A clear, measurable, and inspiring outcome to help users stay focused and motivated."\n'
             "}\n"
-            "Focus on providing content that is practical, motivating, and relatable while ensuring the JSON structure is complete, valid, and error-free. Tailor each plan to the user's query to make the learning journey personal and impactful. Ensure the modules progress logically and conceptually, building on each other step by step. Ensure that the output contains only the JSON and nothing else."
+            "Focus on providing content that is practical, motivating, and relatable while ensuring the JSON structure is complete, valid, and error-free. Tailor each plan to the user's query to make the learning journey personal and impactful. Ensure that the output contains only the JSON and nothing else."
         )
 
         if current_plan:
@@ -385,24 +363,24 @@ async def refresh_token(username: str = Depends(get_current_username)):
 async def query_router(request: dict):
     user_query = request.get("user_query")
     current_plan = request.get("current_plan", None)
-    current_summary = request.get("current_summary", None)
+    current_summary = request.get("current_summary", None)  # Capture the current summary to retain it
 
     if not user_query:
         raise HTTPException(status_code=400, detail="User query is required.")
 
     # Initialize response object
     response_data = {
-        "plan": current_plan,
+        "plan": current_plan,  # Retain the current plan by default
         "summary": current_summary,
         "response": "Unable to process the query. Please try again later."
     }
 
     try:
-        # Check for relevance in the knowledge base
+        # Step 1: Check for relevance in the knowledge base
         context_info = retrieve_information(user_query)
 
         if context_info:
-            # Relevant context found → Generate/Update learning plan
+            # Case 1: Relevant context found → Generate/Update learning plan
             learning_plan_json = generate_plan(user_query, context_info, current_plan)
             plan = validate_and_clean_json(learning_plan_json)
 
@@ -436,7 +414,7 @@ async def query_router(request: dict):
                 response_data["response"] = "Failed to generate or parse learning plan."
 
         elif current_plan:
-            # Indirectly relevant query or context to refine the plan
+            # Case 2: Indirectly relevant query or context to refine the plan
             refine_prompt = (
                 "You are an assistant specializing in refining learning plans. "
                 "Determine if the user's query provides additional context to refine the current plan. "
@@ -454,7 +432,7 @@ async def query_router(request: dict):
 
             refinement = refine_response.choices[0].message.content.strip()
 
-            if refinement.startswith("{"): 
+            if refinement.startswith("{"):  # Check if the response includes a refined plan
                 updated_plan = validate_and_clean_json(refinement)
                 if updated_plan:
                     response_data.update({
@@ -468,18 +446,17 @@ async def query_router(request: dict):
                 # Retain the existing plan and provide a response
                 response_data.update({
                     "response": refinement,
-                    "plan": current_plan, 
-                    "summary": current_summary 
+                    "plan": current_plan,  # Explicitly retain the current plan
+                    "summary": current_summary  # Keep the existing summary
                 })
 
         else:
-            # Irrelevant or general conversational input
+            # Case 3: Irrelevant or general conversational input
             general_prompt = (
                 "You are a helpful assistant specializing in general conversational responses. "
                 "The user's input is unrelated to learning plans or the knowledge base. "
                 "Respond politely and professionally, focusing on the role of a data science assistant."
             )
-            
             general_response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
@@ -620,6 +597,316 @@ def get_modules(plan_id: str, page: int = 1, size: int = 10):
         raise HTTPException(status_code=500, detail="Failed to fetch modules")
     finally:
         connection.close()
+
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def retrieve_detailed_explanation(title: str, description: str, top_k: int = 50) -> str:
+    """
+    Retrieve detailed explanations for the given title and description by querying Pinecone dynamically.
+    """
+    try:
+        logging.info("Starting retrieval of detailed explanations.")
+        logging.info(f"Title: {title}")
+        logging.info(f"Description: {description}")
+        logging.info(f"Top_k parameter: {top_k}")
+
+        # Dynamically create a query based on the title and description
+        query_text = f"Find detailed explanations relevant to the following context:\nTitle: {title}\nDescription: {description}"
+        logging.info("Generated query text for embedding.")
+        
+        query_embedding = get_embedding(query_text)
+        if not query_embedding:
+            logging.error("Failed to generate embedding. Query embedding is empty.")
+            raise ValueError("Query embedding is empty.")
+        logging.info("Successfully generated query embedding.")
+
+        # Query Pinecone
+        logging.info("Querying Pinecone with generated embedding.")
+        results = index.query(
+            vector=query_embedding,
+            top_k=top_k,
+            include_metadata=True
+        )
+
+        # Process results
+        if results and results.get("matches"):
+            logging.info(f"Received {len(results['matches'])} matches from Pinecone.")
+            chunks = []
+            for match in results["matches"]:
+                score = match["score"]
+                chunk_id = match["metadata"].get("chunk_id", "N/A")
+                text = match["metadata"].get("text", "").strip()
+
+                logging.info(f"Processing match with score: {score}, Chunk ID: {chunk_id}")
+                if score >= 0.85:  # Threshold for relevance
+                    if text:
+                        logging.info(f"Adding chunk with score {score} and Chunk ID {chunk_id}.")
+                        chunks.append(f"Chunk ID: {chunk_id}. {text}")
+
+            if chunks:
+                logging.info("Successfully processed and filtered relevant chunks.")
+                return "\n\n".join(chunks)
+            else:
+                logging.warning("No relevant chunks found after filtering.")
+                return "No relevant explanation found."
+
+        logging.warning("No matches received from Pinecone.")
+        return "No relevant explanation found."
+
+    except Exception as e:
+        logging.error(f"Error occurred during explanation retrieval: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving explanation: {str(e)}")
+
+
+@app.get("/get_module_details/{module_id}")
+def get_module_details(module_id: str):
+    """
+    Fetch module details and generate a structured, article-like detailed explanation dynamically.
+    """
+    connection = get_db_connection()
+    try:
+        # Step 1: Retrieve module details from the database
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT MODULE_ID, MODULE, TITLE, DESCRIPTION FROM MODULES WHERE MODULE_ID = %s",
+            (module_id,)
+        )
+        module = cursor.fetchone()
+        if not module:
+            return {"message": f"No details found for module ID: {module_id}"}
+
+        title, description = module[2], module[3]  # Extract title and description
+
+        # Step 2: Retrieve raw explanation from Pinecone
+        raw_explanation = retrieve_detailed_explanation(title, description, top_k=30)
+
+        # Step 3: Use OpenAI to format the explanation into an article
+        try:
+            
+            system_prompt = f"""
+                You are an AI assistant tasked with synthesizing a detailed and professional article based on the provided explanation text. 
+                The explanations are curated to include highly relevant information (relevance score > 0.85) and represent key insights about the topic.
+
+                Context:
+                - Module Title: {title}
+                - Module Description: {description}
+
+                **Purpose**:
+                Your goal is to generate a comprehensive and insightful article that educates readers on the topic. 
+                The article should be structured naturally and cohesively, presenting the information in a logical and engaging manner.
+
+                **Content Guidelines**:
+                1. Use all the provided explanation text, ensuring the original meaning and context are retained.
+                2. Highlight key points and elaborate where necessary to ensure clarity and understanding.
+                3. Avoid introducing external information or data outside of what is provided.
+
+                **Style**:
+                - Write in a professional and engaging tone suitable for an educational audience.
+                - Organize the content in a manner that flows logically, allowing readers to follow the topic easily.
+                - Use paragraphs, headings, or bullet points where necessary to improve readability.
+                - Ensure smooth transitions between ideas and sections for coherence.
+
+                **Additional Instructions**:
+                - Focus on clarity, coherence, and logical progression of ideas.
+                - Avoid unnecessary repetition and ensure the article stays on topic.
+
+                Provided Explanation Text:
+                {raw_explanation}
+            """
+
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "system", "content": system_prompt}],
+                max_tokens=1000,
+                temperature=0
+            )
+            formatted_explanation = response.choices[0].message.content.strip()
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error formatting explanation: {str(e)}")
+
+        # Step 4: Return module details with formatted explanation
+        return {
+            "module_id": module[0],
+            "module": module[1],
+            "title": title,
+            "description": description,
+            "detailed_explanation": formatted_explanation
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch module details")
+    finally:
+        cursor.close()
+        connection.close()
+
+
+
+# --------------------------- YOUTUBE VIDEO LOGIC -----------------------------------------------
+
+youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+
+# Define YouTubeVideoResponse model
+class YouTubeVideoResponse(BaseModel):
+    video_url: Optional[str]
+    relevance_score: Optional[float]
+
+# Function for summarizing text
+def summarize_text(text: str, max_length: int = 100) -> str:
+    try:
+        logger.info("Summarizing input text")
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # or another model if you prefer
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": f"Summarize this text in {max_length} characters: {text}"}
+            ],
+            max_tokens=max_length,
+        )
+
+        # Access the content of the response correctly
+        summary = response.choices[0].message.content.strip()
+        logger.info(f"Summarized text: {summary}")
+        return summary
+
+    except Exception as e:
+        logger.error(f"Error summarizing text: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error summarizing text: {str(e)}")
+
+
+# Function for chunking text
+def chunk_text(text: str, chunk_size: int = 1000) -> List[str]:
+    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+# Fetching relevant YouTube videos
+def fetch_youtube_videos(query: str, max_results: int = 3) -> List[dict]:
+    try:
+        logger.info("Fetching YouTube videos for query: %s", query)
+        search_response = youtube.search().list(
+            q=query, part="snippet", type="video", maxResults=max_results
+        ).execute()
+        videos = [
+            {
+                "video_id": item["id"]["videoId"],
+                "title": item["snippet"]["title"],
+                "description": item["snippet"]["description"],
+            }
+            for item in search_response.get("items", [])
+        ]
+        return videos
+    except Exception as e:
+        logger.error(f"Error fetching YouTube videos: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching YouTube videos: {str(e)}")
+
+# Fetch video transcript
+
+def fetch_video_transcript(video_id: str) -> Optional[str]:
+    try:
+        logger.info("Fetching transcript for video ID: %s", video_id)
+        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
+        return " ".join([item["text"] for item in transcript_data])
+    except Exception as e:
+        # Check if the error is due to transcripts being disabled
+        if "TranscriptsDisabled" in str(e):
+            logger.warning(f"Transcript disabled for video ID: {video_id}")
+            return None
+        logger.error(f"Error fetching transcript for video {video_id}: {str(e)}")
+        return None
+
+
+# Generate embeddings for text
+def generate_embedding(text: str) -> List[float]:
+    try:
+        logger.info("Generating embeddings for text")
+        response = client.embeddings.create(model="text-embedding-ada-002", input=text)
+        return response.data[0].embedding
+    except Exception as e:
+        logger.error(f"Error generating embeddings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
+
+# Upsert video data to Pinecone
+def upsert_to_pinecone(video_id: str, title: str, description: str, transcript_chunks: List[str]) -> None:
+    try:
+        logger.info("Upserting data to Pinecone for video ID: %s", video_id)
+        for idx, chunk in enumerate(transcript_chunks):
+            embedding = generate_embedding(chunk)
+            youtube_index.upsert([
+                {
+                    "id": f"{video_id}_chunk_{idx}",
+                    "values": embedding,
+                    "metadata": {
+                        "title": title,
+                        "description": description,
+                        "transcript_chunk": chunk,
+                        "video_id": video_id,
+                    },
+                }
+            ])
+    except Exception as e:
+        logger.error(f"Error upserting to Pinecone for video {video_id}: {str(e)}")
+
+@app.get("/get_relevant_youtube_video/{module_id}", response_model=YouTubeVideoResponse)
+async def get_relevant_youtube_video(module_id: str):
+    try:
+        logger.info("Fetching relevant YouTube video for module ID: %s", module_id)
+        # Simulated database module details
+
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT TITLE, DESCRIPTION FROM MODULES WHERE MODULE_ID = %s",
+                    (module_id,)
+                )
+                module = cursor.fetchone()
+                if not module:
+                    raise HTTPException(status_code=404, detail=f"No module found with ID {module_id}")
+
+                title, description = module
+
+        module_title = title
+        module_description = description
+        module_detailed_explanation = retrieve_detailed_explanation(title, description)  # Use existing function to get explanation
+        combined_text = f"{module_title} {module_description} {module_detailed_explanation}"
+
+        # Step 1: Summarize input text
+        summarized_text = summarize_text(combined_text)
+
+        # Step 2: Fetch YouTube videos
+        videos = fetch_youtube_videos(summarized_text)
+        if not videos:
+            logger.warning("No relevant YouTube videos found")
+            raise HTTPException(status_code=404, detail="No relevant YouTube videos found.")
+
+        # Step 3: Process transcripts and upsert to Pinecone
+        for video in videos:
+            transcript_text = fetch_video_transcript(video["video_id"])
+            if transcript_text:
+                transcript_chunks = chunk_text(transcript_text)
+                upsert_to_pinecone(video["video_id"], video["title"], video["description"], transcript_chunks)
+
+        # Step 4: Generate embedding for the module content
+        module_embedding = generate_embedding(combined_text)
+
+        # Step 5: Query Pinecone for the most relevant video
+        search_results = youtube_index.query(vector=module_embedding, top_k=1, include_metadata=True)
+        if not search_results["matches"]:
+            logger.warning("No matches found in Pinecone")
+            return {"video_url": None, "relevance_score": None}
+
+        # Extract the most relevant match
+        best_match = search_results["matches"][0]
+        video_url = f"https://www.youtube.com/watch?v={best_match['metadata']['video_id']}"
+        relevance_score = best_match["score"]
+
+        return {"video_url": video_url, "relevance_score": relevance_score}
+
+    except Exception as e:
+        logger.error(f"Error in /get_relevant_youtube_video endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
 
 @app.get("/")
 async def root():

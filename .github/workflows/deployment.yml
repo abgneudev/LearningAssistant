@@ -25,7 +25,6 @@ jobs:
       run: |
         echo "Debugging FastAPI build context..."
         ls -l ./fastapi
-        ls -l ./_work/LearningAssistant/LearningAssistant/fastapi
 
     # Step 4: Free up Disk Space
     - name: Free up disk space

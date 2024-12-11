@@ -73,6 +73,7 @@ jobs:
         echo "PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}" >> .env
         echo "INDEX_NAME=${{ secrets.INDEX_NAME }}" >> .env
         echo "IMG_INDEX_NAME=${{ secrets.IMG_INDEX_NAME }}" >> .env
+        echo "YOUTUBE_INDEX=${{ secrets.YOUTUBE_INDEX }}" >> .env
         echo "DIMENSION=${{ secrets.DIMENSION }}" >> .env
         echo "METRIC=${{ secrets.METRIC }}" >> .env
         echo "FASTAPI_URL=${{ secrets.FASTAPI_URL }}" >> .env

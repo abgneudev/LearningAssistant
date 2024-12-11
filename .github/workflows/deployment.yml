@@ -65,7 +65,7 @@ jobs:
 
     # Step 8: Deploy to EC2 via SSH
     - name: Deploy to EC2 via SSH
-      uses: appleboy/ssh-action@v0.1.12
+      uses: appleboy/ssh-action@v0.1.10
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -81,7 +81,7 @@ jobs:
 
     # Step 9: Verify Deployment
     - name: Check services health
-      uses: appleboy/ssh-action@v0.1.12
+      uses: appleboy/ssh-action@v0.1.10
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -99,3 +99,4 @@ jobs:
             echo "Checking Streamlit service health (attempt $i/$retries)..."
             curl -f http://localhost:8501 && break || sleep $delay
           done
+

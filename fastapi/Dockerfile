@@ -18,16 +18,16 @@ RUN apt-get update && \
     libssl-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files from the fastapi/ folder
-COPY fastapi/pyproject.toml fastapi/poetry.lock ./
+# Copy dependency files (relative to ./fastapi build context)
+COPY pyproject.toml poetry.lock ./
 
 # Install Poetry and dependencies
 RUN pip install poetry==1.8.5 && \
     poetry config virtualenvs.create false && \
     poetry install --no-root --no-interaction --no-ansi
 
-# Copy the application code from the fastapi/ folder
-COPY fastapi/ .
+# Copy application code (relative to ./fastapi build context)
+COPY . .
 
 # Expose FastAPI port
 EXPOSE 8000

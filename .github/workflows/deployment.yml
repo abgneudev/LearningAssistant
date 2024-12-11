@@ -25,13 +25,14 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-        # Build FastAPI Image
+    # Build FastAPI Image
     - name: Build and push FastAPI image
       uses: docker/build-push-action@v4
       with:
         context: ./fastapi
         push: true
         tags: ${{ secrets.DOCKER_USERNAME }}/fastapi:latest
+
 
     # Build Streamlit Image
     - name: Build and push Streamlit image

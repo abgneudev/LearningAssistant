@@ -55,20 +55,18 @@ jobs:
 
     # Step 8: Build and push FastAPI image
     - name: Build and push FastAPI image
-      run: |
-        # Here we set the build context to the project root directory (LearningAssistant)
-        # so that pyproject.toml and poetry.lock, which are at the root level, are accessible.
-        # We still specify the Dockerfile path via --file to the fastapi/Dockerfile, ensuring
-        # Docker uses the correct Dockerfile for building the fastapi image.
-        docker buildx build \
-          --platform linux/amd64 \
-          --push \
-          --cache-from=type=registry,ref=${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
-          --cache-to=type=inline \
-          --file ./fastapi/Dockerfile \   # Explicitly pointing to the Dockerfile in the fastapi directory
-          --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
-          --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
-          .  # Using '.' sets the current directory as the build context root
+      - name: Build and push FastAPI image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --push \
+            --cache-from=type=registry,ref=${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
+            --cache-to=type=inline \
+            --file ./fastapi/Dockerfile \  # Explicitly pointing to the Dockerfile in the fastapi directory
+            --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
+            --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
+            .
+
 
 
     # Step 9: Build and push Streamlit Image

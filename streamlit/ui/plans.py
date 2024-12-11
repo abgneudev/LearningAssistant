@@ -1,5 +1,9 @@
 import streamlit as st
 import requests
+import os
+
+# Get the FastAPI URL from environment variables
+FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")
 
 def main():
     st.title("Saved Plans")
@@ -20,7 +24,7 @@ def main():
     # Fetch all saved plans for the logged-in user from the backend
     try:
         response = requests.get(
-            "http://127.0.0.1:8000/get_plans",
+            "{FASTAPI_URL}/get_plans",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code == 200:
@@ -83,7 +87,7 @@ def main():
         # Fetch modules for the selected plan
         try:
             modules_response = requests.get(
-                f"http://127.0.0.1:8000/get_modules/{selected_plan_id}",
+                f"{FASTAPI_URL}/get_modules/{selected_plan_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             if modules_response.status_code == 200:

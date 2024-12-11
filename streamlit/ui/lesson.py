@@ -1,6 +1,9 @@
 import streamlit as st
 import requests
+import os
 
+# Get the FastAPI URL from environment variables
+FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")
 
 def main():
     st.title("Lesson Details")
@@ -20,7 +23,7 @@ def main():
     # Fetch details for the selected module from the backend
     try:
         response = requests.get(
-            f"http://127.0.0.1:8000/get_module_details/{selected_module_id}",
+            f"{FASTAPI_URL}/get_module_details/{selected_module_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code == 200:
@@ -55,7 +58,7 @@ def main():
     try:
         with st.spinner("Fetching the most relevant YouTube video..."):
             video_response = requests.get(
-                f"http://127.0.0.1:8000/get_relevant_youtube_video/{selected_module_id}"
+                f"{FASTAPI_URL}/get_relevant_youtube_video/{selected_module_id}"
             )
 
         if video_response.status_code == 200:

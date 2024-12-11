@@ -1,6 +1,10 @@
 import streamlit as st
 import requests
 import json
+import os
+
+# Get the FastAPI URL from environment variables
+fastapi_url = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")
 
 def main():
     # List of session state keys to reset
@@ -46,7 +50,7 @@ def main():
         # Make a request to the backend for processing
         try:
             response = requests.post(
-                "http://127.0.0.1:8000/query",
+                "{fastapi_url}/query",
                 json={
                     "user_query": user_query,
                     "current_plan": st.session_state.get("current_plan"),
@@ -124,7 +128,7 @@ def main():
         if st.button("Save Plan to Database", key="save_plan_button"):
             try:
                 save_response = requests.post(
-                    "http://127.0.0.1:8000/save_plan",
+                    "{fastapi_url}/save_plan",
                     json={
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],

@@ -18,6 +18,8 @@ youtube-transcript-api = "^0.6.3"
 langgraph = "0.2.57"
 langsmith = "0.1.125"
 langchain-core = "0.2.43"
+fastapi-utils = "^0.8.0"
+typing-inspect = "^0.9.0"
 
 
 [build-system]

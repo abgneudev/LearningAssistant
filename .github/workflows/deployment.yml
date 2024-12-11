@@ -43,7 +43,8 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/fastapi:latest
           ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }}
-        no-cache: true
+        cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/fastapi:latest
+        cache-to: type=inline
 
     # Step 6: Build Streamlit Image
     - name: Build and push Streamlit image
@@ -54,7 +55,8 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/streamlit:latest
           ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }}
-        no-cache: true
+        cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/streamlit:latest
+        cache-to: type=inline
 
     # Step 7: Debug Build Context
     - name: Debug build context for FastAPI
@@ -65,7 +67,7 @@ jobs:
 
     # Step 8: Deploy to EC2 via SSH
     - name: Deploy to EC2 via SSH
-      uses: appleboy/ssh-action@v0.1.10
+      uses: appleboy/ssh-action@v1.2.0
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -81,7 +83,7 @@ jobs:
 
     # Step 9: Verify Deployment
     - name: Check services health
-      uses: appleboy/ssh-action@v0.1.10
+      uses: appleboy/ssh-action@v0.1.15
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -99,4 +101,3 @@ jobs:
             echo "Checking Streamlit service health (attempt $i/$retries)..."
             curl -f http://localhost:8501 && break || sleep $delay
           done
-

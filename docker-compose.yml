@@ -41,6 +41,8 @@ services:
       DIMENSION: ${DIMENSION}
       IMAGE_DIMENSIONS: ${IMAGE_DIMENSIONS}
     restart: always
+    env_file:
+      - .env
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
       interval: 10s
@@ -92,6 +94,8 @@ services:
       DIMENSION: ${DIMENSION}
       IMAGE_DIMENSIONS: ${IMAGE_DIMENSIONS}
     restart: always
+    env_file:
+      - .env
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8501 || exit 1"]
       interval: 10s

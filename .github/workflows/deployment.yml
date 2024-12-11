@@ -53,7 +53,7 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
-          ./_work/LearningAssistant/LearningAssistant/fastapi
+          ~/LearningAssistant/fastapi
 
     # Step 7: Build Streamlit Image
     - name: Build and push Streamlit image
@@ -65,7 +65,7 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }} \
-          ./_work/LearningAssistant/LearningAssistant/streamlit
+          ~/LearningAssistant/streamlit
 
     # Step 8: Create .env file for secrets
     - name: Create .env file

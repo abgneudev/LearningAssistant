@@ -25,25 +25,22 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # Step 4: Build and push FastAPI Docker image
+        # Build FastAPI Image
     - name: Build and push FastAPI image
       uses: docker/build-push-action@v4
       with:
         context: ./fastapi
         push: true
         tags: ${{ secrets.DOCKER_USERNAME }}/fastapi:latest
-        cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/fastapi:latest
-        cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/fastapi:latest,mode=max
 
-    # Step 5: Build and push Streamlit Docker image
+    # Build Streamlit Image
     - name: Build and push Streamlit image
       uses: docker/build-push-action@v4
       with:
         context: ./streamlit
         push: true
         tags: ${{ secrets.DOCKER_USERNAME }}/streamlit:latest
-        cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/streamlit:latest
-        cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/streamlit:latest,mode=max
+
 
     # Step 6: Deploy to EC2 via SSH
     - name: Deploy to EC2 via SSH
@@ -55,7 +52,9 @@ jobs:
         port: 22
         script: |
           cd /home/ubuntu/LearningAssistant
+          echo "Updating images..."
           sudo docker-compose pull
+          echo "Starting services with environment variables..."
           sudo docker-compose up -d --remove-orphans
 
     # Step 7: Verify Deployment

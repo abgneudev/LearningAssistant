@@ -30,7 +30,7 @@ RUN pip install poetry==1.8.5 && \
     poetry install --no-root --no-interaction --no-ansi
 
 # Copy the rest of the application code
-COPY fastapi/ ./fastapi/
+COPY . ./fastapi/
 
 # Expose FastAPI port
 EXPOSE 8000

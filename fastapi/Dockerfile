@@ -9,17 +9,19 @@ ENV PYTHONUNBUFFERED=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     libffi-dev \
-    libssl-dev && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    libssl-dev \
+    curl \
+    wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files (relative to ./fastapi build context)
-COPY pyproject.toml poetry.lock ./
+COPY fastapi/pyproject.toml fastapi/poetry.lock ./
 
 # Install Poetry and dependencies
 RUN pip install poetry==1.8.5 && \

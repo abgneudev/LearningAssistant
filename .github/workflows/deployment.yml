@@ -83,7 +83,7 @@ jobs:
 
     # Step 9: Verify Deployment
     - name: Check services health
-      uses: appleboy/ssh-action@v0.1.15
+      uses: appleboy/ssh-action@v1.2.0
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu

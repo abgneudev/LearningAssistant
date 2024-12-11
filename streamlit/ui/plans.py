@@ -39,11 +39,20 @@ def main():
         st.info("No saved plans available.")
         return
 
-    # Dropdown to select a plan
-    plan_options = {plan["plan_id"]: plan["title"] for plan in plans}
+    # Searchable Dropdown
+    search_term = st.text_input("Search Plans", placeholder="Type to search plans")
+    filtered_plans = [plan for plan in plans if search_term.lower() in plan["title"].lower()]
+
+    if not filtered_plans:
+        st.warning("No plans match your search.")
+        return
+
+    plan_options = {plan["plan_id"]: plan["title"] for plan in filtered_plans}
+    # Add a limit to the dropdown by controlling the display items
+    max_display_items = 100  # Customize as per UI preference
     selected_plan_id = st.selectbox(
         "Select a Plan",
-        options=plan_options.keys(),
+        options=list(plan_options.keys())[:max_display_items],  # Limit to max_display_items
         format_func=lambda x: plan_options[x] if x in plan_options else "Unknown Plan",
     )
 

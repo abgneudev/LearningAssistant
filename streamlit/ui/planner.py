@@ -3,6 +3,20 @@ import requests
 import json
 
 def main():
+    # List of session state keys to reset
+    keys_to_reset = [
+        "chat_history",
+        "current_plan",
+        "current_summary",
+        "general_response",
+        "save_status"
+    ]
+
+    # Clear specified session state variables
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
     st.title("Planner")
 
     # Ensure token and username are available in session state
@@ -10,20 +24,17 @@ def main():
         st.error("You are not logged in. Please log in to create or view plans.")
         return
 
-    access_token = st.session_state["access_token"]
-    username = st.session_state["username"]
-
-    # Initialize chat history, current plan, save status, and fallback response if not present
+    # Initialize session state variables if not present
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
     if "current_plan" not in st.session_state:
         st.session_state["current_plan"] = None
     if "current_summary" not in st.session_state:
-        st.session_state["current_summary"] = "No summary provided yet."  # To retain the summary for the current plan
+        st.session_state["current_summary"] = "No summary provided yet."
     if "general_response" not in st.session_state:
         st.session_state["general_response"] = "No general response yet."
     if "save_status" not in st.session_state:
-        st.session_state["save_status"] = None  # Track save status for the plan
+        st.session_state["save_status"] = None
 
     # Chat input for user query
     user_query = st.chat_input("What do you want to learn today?")

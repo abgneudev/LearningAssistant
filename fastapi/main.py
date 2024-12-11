@@ -54,12 +54,13 @@ from config import (
 )
 import logging
 import json
+from typing import Optional, List
 from datetime import datetime
+from fastapi_utils.tasks import repeat_every
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
 
 # -------- FastAPI Setup --------
 
@@ -74,6 +75,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+@repeat_every(seconds=300)  # Every 5 minutes
+def keep_connections_alive():
+    logging.info("Running keep-alive task for Snowflake connections.")
+    for _ in range(pool.pool.qsize()):
+        connection = pool.get_connection()
+        try:
+            connection.cursor().execute("SELECT 1")
+        except Exception as e:
+            logging.error(f"Keep-alive task failed for a connection: {e}")
+        finally:
+            pool.release_connection(connection)
+
 
 # --------  API Endpoints  --------
 @app.post("/signup")
@@ -263,23 +278,29 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
         connection.close()
 
 @app.get("/get_plans")
-def get_plans(username: str = Depends(get_current_username), page: int = 1, size: int = 10):
+def get_plans(username: str = Depends(get_current_username), page: int = 1, size: Optional[int] = 0):
     """
-    Fetch paginated plans for the currently logged-in user.
+    Fetch paginated or all plans for the currently logged-in user.
+    Set size=0 or size=None to fetch all results.
     """
     connection = get_db_connection()
     try:
-        offset = (page - 1) * size
+        # Determine the offset and limit based on size
+        offset = (page - 1) * size if size else 0  # Offset is zero if fetching all
+        query = """
+            SELECT plan_id, title, summary, key_topics, learning_outcomes
+            FROM plans
+            WHERE username = %s
+        """
+        if size:
+            query += " LIMIT %s OFFSET %s"
+
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT plan_id, title, summary, key_topics, learning_outcomes
-                FROM plans
-                WHERE username = %s
-                LIMIT %s OFFSET %s
-                """,
-                (username, size, offset),
-            )
+            if size:
+                cursor.execute(query, (username, size, offset))
+            else:
+                cursor.execute(query, (username,))
+
             plans = [
                 {
                     "plan_id": row[0],
@@ -299,6 +320,7 @@ def get_plans(username: str = Depends(get_current_username), page: int = 1, size
         raise HTTPException(status_code=500, detail="Failed to fetch plans")
     finally:
         connection.close()
+
 
 @app.get("/get_modules/{plan_id}")
 def get_modules(plan_id: str, page: int = 1, size: int = 10):

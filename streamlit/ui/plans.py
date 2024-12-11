@@ -1,6 +1,10 @@
 import streamlit as st
 import requests
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Get the FastAPI URL from environment variables
 FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")

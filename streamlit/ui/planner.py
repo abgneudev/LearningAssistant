@@ -2,9 +2,13 @@ import streamlit as st
 import requests
 import json
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Get the FastAPI URL from environment variables
-fastapi_url = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")
+FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")
 
 def main():
     # List of session state keys to reset
@@ -50,7 +54,7 @@ def main():
         # Make a request to the backend for processing
         try:
             response = requests.post(
-                "{fastapi_url}/query",
+                "{FASTAPI_URL}/query",
                 json={
                     "user_query": user_query,
                     "current_plan": st.session_state.get("current_plan"),
@@ -128,7 +132,7 @@ def main():
         if st.button("Save Plan to Database", key="save_plan_button"):
             try:
                 save_response = requests.post(
-                    "{fastapi_url}/save_plan",
+                    "{FASTAPI_URL}/save_plan",
                     json={
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],

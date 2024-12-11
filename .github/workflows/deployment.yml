@@ -7,19 +7,27 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: self-hosted  # Updated to use the self-hosted runner
+    runs-on: self-hosted  # Use the self-hosted runner
 
     steps:
     # Step 1: Checkout code
     - name: Checkout code
       uses: actions/checkout@v3
       with:
-        fetch-depth: 0  # Ensure all files are checked out, not a shallow clone
+        fetch-depth: 0  # Ensure all files are checked out
 
+    # Step 2: Print working directory
     - name: Print working directory
       run: pwd
 
-    # Step 2: Free up Disk Space
+    # Step 3: Debug FastAPI Build Context
+    - name: Debug FastAPI build context
+      run: |
+        echo "Debugging FastAPI build context..."
+        ls -l ./fastapi
+        ls -l ./_work/LearningAssistant/LearningAssistant/fastapi
+
+    # Step 4: Free up Disk Space
     - name: Free up disk space
       run: |
         echo "Cleaning up unused resources..."
@@ -30,23 +38,16 @@ jobs:
         docker volume prune -f || true
         df -h
 
-    # Step 3: Set up Docker Buildx
+    # Step 5: Set up Docker Buildx
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
-    # Step 4: Log in to DockerHub
+    # Step 6: Log in to DockerHub
     - name: Log in to DockerHub
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # Step 5: Debug Build Context
-    - name: Debug FastAPI build context
-      run: |
-        echo "Debugging FastAPI build context..."
-        ls -l ./fastapi
-        ls -l ./_work/LearningAssistant/LearningAssistant/fastapi
-
-    # Step 6: Build FastAPI Image
+    # Step 7: Build FastAPI Image
     - name: Build and push FastAPI image
       run: |
         docker buildx build \
@@ -56,9 +57,9 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
-          ~/LearningAssistant/fastapi
+          ./fastapi
 
-    # Step 7: Build Streamlit Image
+    # Step 8: Build Streamlit Image
     - name: Build and push Streamlit image
       run: |
         docker buildx build \
@@ -68,9 +69,9 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }} \
-          ~/LearningAssistant/streamlit
+          ./streamlit
 
-    # Step 8: Create .env file for secrets
+    # Step 9: Create .env file for secrets
     - name: Create .env file
       run: |
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
@@ -93,18 +94,18 @@ jobs:
         echo "REGION=${{ secrets.REGION }}" >> .env      
         echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env         
 
-    # Step 9: Ensure Docker Network Exists
+    # Step 10: Ensure Docker Network Exists
     - name: Ensure Docker Network Exists
       run: |
         docker network inspect learningassistant_app-network || docker network create learningassistant_app-network
 
-    # Step 10: Deploy with Docker Compose
+    # Step 11: Deploy with Docker Compose
     - name: Deploy with Docker Compose
       run: |
         docker-compose pull
         docker-compose up -d --remove-orphans
 
-    # Step 11: Verify Deployment
+    # Step 12: Verify Deployment
     - name: Check FastAPI service health
       run: |
         retries=10

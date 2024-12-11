@@ -2,7 +2,7 @@ services:
   fastapi:
     image: abdocker0210/fastapi:latest
     networks:
-      - app-network
+      - learningassistant_app-network
     ports:
       - "8000:8000"
     environment:
@@ -31,7 +31,7 @@ services:
   streamlit:
     image: abdocker0210/streamlit:latest
     networks:
-      - app-network
+      - learningassistant_app-network
     ports:
       - "8501:8501"
     depends_on:
@@ -56,5 +56,5 @@ services:
       retries: 3
 
 networks:
-  app-network:
+  learningassistant_app-network:
     external: true

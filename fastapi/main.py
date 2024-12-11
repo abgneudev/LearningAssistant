@@ -235,6 +235,9 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
     plan = request.get("plan")
     summary = request.get("summary")
 
+    # Debug: Log the incoming request
+    logging.info(f"Received save_plan request: Plan: {plan}, Summary: {summary}")
+
     if not plan or not summary:
         raise HTTPException(status_code=400, detail="Plan and summary are required.")
 
@@ -246,6 +249,9 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
             title = plan.get("Title", "Untitled Plan")
             key_topics = json.dumps(plan.get("KeyTopics", []))
             learning_outcomes = plan.get("ExpectedOutcome", "N/A")
+
+            # Debug: Log the plan being inserted
+            logging.info(f"Inserting Plan: ID: {plan_id}, Title: {title}, User: {username}")
 
             cursor.execute(
                 """
@@ -261,6 +267,8 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
                 module_number = module.get("module", 0)
                 module_title = module.get("title", "No Title")
                 description = module.get("description", "No Description")
+                logging.info(f"Inserting Module: ID: {module_id}, Title: {module_title}, Plan ID: {plan_id}")
+
                 cursor.execute(
                     """
                     INSERT INTO MODULES (MODULE_ID, PLAN_ID, MODULE, TITLE, DESCRIPTION)
@@ -270,12 +278,15 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
                 )
 
             connection.commit()
+            logging.info(f"Plan and modules saved successfully. Plan ID: {plan_id}")
             return {"message": "Plan saved successfully.", "plan_id": plan_id}
     except Exception as e:
         connection.rollback()
+        logging.error(f"Error saving plan: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while saving the plan.")
     finally:
         connection.close()
+
 
 @app.get("/get_plans")
 def get_plans(username: str = Depends(get_current_username), page: int = 1, size: Optional[int] = 0):

@@ -17,8 +17,10 @@ jobs:
     # Step 2: Free up Disk Space
     - name: Free up disk space
       run: |
+        echo "Cleaning up unused resources..."
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
         docker system prune -af || true
+        docker volume prune -f || true
         df -h
 
     # Step 3: Set up Docker Buildx
@@ -32,39 +34,27 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # Step 5: Cache Python Dependencies for FastAPI
-    - name: Cache FastAPI Python dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-fastapi-${{ hashFiles('fastapi/poetry.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-fastapi-
-
-    # Build FastAPI Image
+    # Step 5: Build FastAPI Image
     - name: Build and push FastAPI image
       uses: docker/build-push-action@v4
       with:
         context: ./fastapi
         push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/fastapi:latest
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/fastapi:latest
+          ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }}
+        no-cache: true
 
-    # Step 6: Cache Python Dependencies for Streamlit
-    - name: Cache Streamlit Python dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-streamlit-${{ hashFiles('streamlit/poetry.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-streamlit-
-
-    # Build Streamlit Image
+    # Step 6: Build Streamlit Image
     - name: Build and push Streamlit image
       uses: docker/build-push-action@v4
       with:
         context: ./streamlit
         push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/streamlit:latest
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/streamlit:latest
+          ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }}
+        no-cache: true
 
     # Step 7: Debug Build Context
     - name: Debug build context for FastAPI
@@ -75,7 +65,7 @@ jobs:
 
     # Step 8: Deploy to EC2 via SSH
     - name: Deploy to EC2 via SSH
-      uses: appleboy/ssh-action@v0.1.10
+      uses: appleboy/ssh-action@v0.1.12
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -84,14 +74,14 @@ jobs:
         script: |
           set -e
           cd /home/ubuntu/LearningAssistant
-          echo "Updating images..."
-          sudo docker-compose pull
-          echo "Starting services with environment variables..."
+          echo "Pulling latest Docker images..."
+          sudo docker-compose pull --ignore-pull-failures
+          echo "Restarting services..."
           sudo docker-compose up -d --remove-orphans
 
     # Step 9: Verify Deployment
     - name: Check services health
-      uses: appleboy/ssh-action@v0.1.10
+      uses: appleboy/ssh-action@v0.1.12
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -99,11 +89,13 @@ jobs:
         port: 22
         script: |
           set -e
-          echo "Checking FastAPI service health..."
-          for i in {1..5}; do
-            curl -f http://localhost:8000/docs && break || echo "Retrying FastAPI health check..." && sleep 5
+          retries=5
+          delay=5
+          for i in $(seq 1 $retries); do
+            echo "Checking FastAPI service health (attempt $i/$retries)..."
+            curl -f http://localhost:8000/docs && break || sleep $delay
           done
-          echo "Checking Streamlit service health..."
-          for i in {1..5}; do
-            curl -f http://localhost:8501 && break || echo "Retrying Streamlit health check..." && sleep 5
+          for i in $(seq 1 $retries); do
+            echo "Checking Streamlit service health (attempt $i/$retries)..."
+            curl -f http://localhost:8501 && break || sleep $delay
           done

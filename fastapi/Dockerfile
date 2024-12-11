@@ -20,19 +20,20 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files (relative to ./fastapi build context)
-COPY fastapi/pyproject.toml fastapi/poetry.lock ./
+# Copy dependency files explicitly
+COPY fastapi/pyproject.toml ./pyproject.toml
+COPY fastapi/poetry.lock ./poetry.lock
 
 # Install Poetry and dependencies
 RUN pip install poetry==1.8.5 && \
     poetry config virtualenvs.create false && \
     poetry install --no-root --no-interaction --no-ansi
 
-# Copy application code (relative to ./fastapi build context)
-COPY . .
+# Copy the rest of the application code
+COPY fastapi/ ./fastapi/
 
 # Expose FastAPI port
 EXPOSE 8000
 
 # Command to run FastAPI
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "fastapi.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -28,7 +28,7 @@ def main():
     # Fetch all saved plans for the logged-in user from the backend
     try:
         response = requests.get(
-            "{FASTAPI_URL}/get_plans",
+            f"{FASTAPI_URL}/get_plans",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code == 200:

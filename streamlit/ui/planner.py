@@ -54,7 +54,7 @@ def main():
         # Make a request to the backend for processing
         try:
             response = requests.post(
-                "{FASTAPI_URL}/query",
+                f"{FASTAPI_URL}/query",
                 json={
                     "user_query": user_query,
                     "current_plan": st.session_state.get("current_plan"),
@@ -132,7 +132,7 @@ def main():
         if st.button("Save Plan to Database", key="save_plan_button"):
             try:
                 save_response = requests.post(
-                    "{FASTAPI_URL}/save_plan",
+                    f"{FASTAPI_URL}/save_plan",
                     json={
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],

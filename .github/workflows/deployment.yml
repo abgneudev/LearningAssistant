@@ -24,7 +24,7 @@ jobs:
     - name: Debug FastAPI build context
       run: |
         echo "Debugging FastAPI build context..."
-        ls -l ./fastapi
+        ls -l /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi
 
     # Step 4: Free up Disk Space
     - name: Free up disk space
@@ -46,7 +46,14 @@ jobs:
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # Step 7: Build FastAPI Image
+    # Step 7: Build FastAPI Image (using direct Dockerfile reference)
+    - name: Build FastAPI image using explicit Dockerfile
+      run: |
+        docker buildx build \
+          --file /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi/Dockerfile \
+          /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi
+
+    # Step 8: Build and push FastAPI image
     - name: Build and push FastAPI image
       run: |
         docker buildx build \
@@ -56,9 +63,9 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
-          ./fastapi
+          /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi
 
-    # Step 8: Build Streamlit Image
+    # Step 9: Build and push Streamlit Image
     - name: Build and push Streamlit image
       run: |
         docker buildx build \
@@ -70,7 +77,7 @@ jobs:
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }} \
           ./streamlit
 
-    # Step 9: Create .env file for secrets
+    # Step 10: Create .env file for secrets
     - name: Create .env file
       run: |
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
@@ -93,18 +100,18 @@ jobs:
         echo "REGION=${{ secrets.REGION }}" >> .env      
         echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env         
 
-    # Step 10: Ensure Docker Network Exists
+    # Step 11: Ensure Docker Network Exists
     - name: Ensure Docker Network Exists
       run: |
         docker network inspect learningassistant_app-network || docker network create learningassistant_app-network
 
-    # Step 11: Deploy with Docker Compose
+    # Step 12: Deploy with Docker Compose
     - name: Deploy with Docker Compose
       run: |
         docker-compose pull
         docker-compose up -d --remove-orphans
 
-    # Step 12: Verify Deployment
+    # Step 13: Verify Deployment
     - name: Check FastAPI service health
       run: |
         retries=10

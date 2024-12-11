@@ -20,9 +20,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files explicitly
-COPY fastapi/pyproject.toml ./pyproject.toml
-COPY fastapi/poetry.lock ./poetry.lock
+
+COPY pyproject.toml ./pyproject.toml
+COPY poetry.lock ./poetry.lock
 
 # Install Poetry and dependencies
 RUN pip install poetry==1.8.5 && \

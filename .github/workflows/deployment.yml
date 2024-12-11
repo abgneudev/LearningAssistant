@@ -86,7 +86,6 @@ jobs:
         echo "CLOUD_PROVIDER=${{ secrets.CLOUD_PROVIDER }}" >> .env 
         echo "REGION=${{ secrets.REGION }}" >> .env                  
 
-
     # Step 9: Ensure Docker Network Exists
     - name: Ensure Docker Network Exists
       run: |

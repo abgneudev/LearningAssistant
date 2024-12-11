@@ -37,14 +37,14 @@ youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
 # Check if the Pinecone index exists
 existing_indexes = [idx["name"] for idx in pc.list_indexes()]
-if INDEX_NAME not in existing_indexes:
-    # Create the index if it doesn't exist
-    pc.create_index(
-        name=INDEX_NAME,
-        dimension=DIMENSION,
-        metric=METRIC,
-        spec=ServerlessSpec(cloud=CLOUD_PROVIDER, region=REGION),
-    )
+# if INDEX_NAME not in existing_indexes:
+#     # Create the index if it doesn't exist
+#     pc.create_index(
+#         name=INDEX_NAME,
+#         dimension=DIMENSION,
+#         metric=METRIC,
+#         spec=ServerlessSpec(cloud=CLOUD_PROVIDER, region=REGION),
+#     )
 
 # Connect to the index
 index = pc.Index(INDEX_NAME)

@@ -18,6 +18,8 @@ jobs:
     - name: Free up disk space
       run: |
         echo "Cleaning up unused resources..."
+        sudo apt-get autoremove -y
+        sudo apt-get clean
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
         docker system prune -af || true
         docker volume prune -f || true

@@ -74,6 +74,7 @@ jobs:
     # Step 10: Create .env file for secrets
     - name: Create .env file
       run: |
+        echo "FASTAPI_URL=${{ secrets.FASTAPI_URL }}" > .env
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
         echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
         echo "PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}" >> .env
@@ -82,7 +83,6 @@ jobs:
         echo "YOUTUBE_INDEX=${{ secrets.YOUTUBE_INDEX }}" >> .env
         echo "DIMENSION=${{ secrets.DIMENSION }}" >> .env
         echo "METRIC=${{ secrets.METRIC }}" >> .env
-        echo "FASTAPI_URL=${{ secrets.FASTAPI_URL }}" >> .env
         echo "SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }}" >> .env
         echo "SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }}" >> .env
         echo "SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }}" >> .env

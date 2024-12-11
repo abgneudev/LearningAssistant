@@ -1,3 +1,6 @@
+- name: Print working directory
+  run: pwd
+
 name: Deploy AI Assistant
 
 on:
@@ -15,6 +18,9 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0  # Ensure all files are checked out, not a shallow clone
+
+    - name: Print working directory
+      run: pwd
 
     # Step 2: Free up Disk Space
     - name: Free up disk space

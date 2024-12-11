@@ -60,7 +60,7 @@ def main():
                     "current_plan": st.session_state.get("current_plan"),
                     "current_summary": st.session_state.get("current_summary"),  # Pass current summary
                 },
-                headers={"Authorization": f"Bearer {access_token}"},  # Include token
+                headers={"Authorization": f"Bearer {st.session_state.get('access_token', '')}"}, # Include token
             )
 
             if response.status_code == 200:
@@ -137,7 +137,7 @@ def main():
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],
                     },
-                    headers={"Authorization": f"Bearer {access_token}"},  # Include token
+                    headers={"Authorization": f"Bearer {st.session_state.get('access_token', '')}"},  # Include token
                 )
 
                 if save_response.status_code == 200:

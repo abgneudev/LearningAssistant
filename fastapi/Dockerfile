@@ -30,10 +30,10 @@ RUN pip install poetry==1.8.5 && \
     poetry install --no-root --no-interaction --no-ansi
 
 # Copy the rest of the application code
-COPY . ./fastapi/
+COPY . /app/
 
 # Expose FastAPI port
 EXPOSE 8000
 
 # Command to run FastAPI
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "fastapi.main:app", "--host", "0.0.0.0", "--port", "8000"]

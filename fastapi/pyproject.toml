@@ -20,6 +20,11 @@ langsmith = "0.1.125"
 langchain-core = "0.2.43"
 fastapi-utils = "^0.8.0"
 typing-inspect = "^0.9.0"
+openai = "^1.57.2"
+tiktoken = "^0.8.0"
+scikit-learn = "^1.6.0"
+numpy = "^2.2.0"
+pinecone = "^5.4.2"
 
 
 [build-system]

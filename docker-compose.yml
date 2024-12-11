@@ -1,0 +1,53 @@
+services:
+  fastapi:
+    image: abdocker0210/fastapi:latest
+    networks:
+      - app-network
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: always
+
+  streamlit:
+    image: abdocker0210/streamlit:latest
+    networks:
+      - app-network
+    ports:
+      - "8501:8501"
+    depends_on:
+      - fastapi
+    env_file:
+      # FastAPI URL
+      FASTAPI_URL=http://127.0.0.1:8000
+      
+      # Snowflake Configuration
+      SNOWFLAKE_USER=vicksInhaler
+      SNOWFLAKE_PASSWORD=vicksInhaler@123
+      SNOWFLAKE_ACCOUNT=vt67315.us-east-2.aws
+      SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+      SNOWFLAKE_DATABASE=final_project
+      SNOWFLAKE_SCHEMA=PUBLIC
+      
+      # JWT Configuration
+      SECRET_KEY=CR7SIUUUUUU
+      
+      YOUTUBE_API_KEY=AIzaSyAMxgJ2SVUtfmyOknp1i6q8uN8Hh5FLMmo
+      PINECONE_API_KEY=pcsk_4BvNTc_nvWFLwdzHLJXwwrvYB2XAo4xzVv1syRb792Nnhe2HzMJE6BxwKNjcmtMXwaFiE
+      PINECONE_ENVIRONMENT=8wpg5un.svc.aped-4627-b74a.pinecone.io
+      OPENAI_API_KEY=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
+
+      INDEX_NAME=gfg-index
+      YOUTUBE_INDEX=youtube-index
+      DIMENSION=1536
+      METRIC=cosine
+      CLOUD_PROVIDER=aws
+      REGION=us-east-1
+
+      IMG_INDEX_NAME=image-index
+      IMAGE_DIMENSIONS=512
+    restart: always
+
+networks:
+  app-network:
+    driver: bridge

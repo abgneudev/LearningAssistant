@@ -22,6 +22,11 @@ services:
       SNOWFLAKE_DATABASE: ${SNOWFLAKE_DATABASE}
       SNOWFLAKE_SCHEMA: ${SNOWFLAKE_SCHEMA}
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   streamlit:
     image: abdocker0210/streamlit:latest
@@ -30,7 +35,8 @@ services:
     ports:
       - "8501:8501"
     depends_on:
-      - fastapi
+      fastapi:
+        condition: service_healthy
     environment:
       FASTAPI_URL: ${FASTAPI_URL}
       SECRET_KEY: ${SECRET_KEY}
@@ -43,6 +49,11 @@ services:
       METRIC: ${METRIC}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 networks:
   app-network:

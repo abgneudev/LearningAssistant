@@ -85,17 +85,22 @@ jobs:
         echo "SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}" >> .env
         echo "YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}" >> .env
 
-    # Step 9: Deploy with Docker Compose
+    # Step 9: Ensure Docker Network Exists
+    - name: Ensure Docker Network Exists
+      run: |
+        docker network inspect learningassistant_app-network || docker network create learningassistant_app-network
+
+    # Step 10: Deploy with Docker Compose
     - name: Deploy with Docker Compose
       run: |
         docker-compose pull
         docker-compose up -d --remove-orphans
 
-    # Step 10: Verify Deployment
+    # Step 11: Verify Deployment
     - name: Check FastAPI service health
       run: |
-        retries=5
-        delay=5
+        retries=10
+        delay=10
         for i in $(seq 1 $retries); do
           echo "Checking FastAPI service health (attempt $i/$retries)..."
           curl -f http://localhost:8000/docs && break || sleep $delay
@@ -103,8 +108,8 @@ jobs:
 
     - name: Check Streamlit service health
       run: |
-        retries=5
-        delay=5
+        retries=10
+        delay=10
         for i in $(seq 1 $retries); do
           echo "Checking Streamlit service health (attempt $i/$retries)..."
           curl -f http://localhost:8501 && break || sleep $delay

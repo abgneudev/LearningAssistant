@@ -36,4 +36,4 @@ COPY . ./fastapi/
 EXPOSE 8000
 
 # Command to run FastAPI
-CMD ["uvicorn", "fastapi.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

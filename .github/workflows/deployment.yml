@@ -85,7 +85,8 @@ jobs:
         echo "SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}" >> .env
         echo "YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}" >> .env
         echo "CLOUD_PROVIDER=${{ secrets.CLOUD_PROVIDER }}" >> .env 
-        echo "REGION=${{ secrets.REGION }}" >> .env                  
+        echo "REGION=${{ secrets.REGION }}" >> .env      
+        echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env         
 
     # Step 9: Ensure Docker Network Exists
     - name: Ensure Docker Network Exists

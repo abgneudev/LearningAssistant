@@ -5,19 +5,14 @@ __pycache__/
 *.pyd
 
 # Ignore virtual environment
-../venv/
+venv/
 
 # Ignore environment and key files
-../.env
-../keys/
-../*.pem:Zone.Identifier
-../*.pem
+.env
 
-# Ignore root and other service-specific files
-../fastapi/
-../docker-compose.yml
-../.git
-../.gitignore
+# Ignore Git-related files
+.git
+.gitignore
 
 # Ignore macOS metadata
 .DS_Store

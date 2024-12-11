@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Get the FastAPI URL from environment variables
-FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000")
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 
 def main():
     st.title("Lesson Details")

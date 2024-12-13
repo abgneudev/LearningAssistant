@@ -217,6 +217,13 @@ class QuizQuestion(BaseModel):
 class QuizGeneration(BaseModel):
     quiz: List[QuizQuestion]
 
+class SummarizationRequest(BaseModel):
+    image_urls: List[str]
+
+# class ImageSummaryRequest(BaseModel):
+#     module_id: str
+#     image_urls: List[str]
+
 # -------- Utility Functions --------
 
 def get_db_connection():

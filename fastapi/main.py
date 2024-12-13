@@ -16,6 +16,10 @@ from lessons import (
     summarize_text,
     generate_embedding,
     chunk_text,
+    # retrieve_from_image_index,
+    # generate_text_embedding,
+    # summarize_image_with_openai, 
+    # generate_image_summaries
 )
 from utils import (
     get_password_hash,
@@ -29,6 +33,8 @@ from utils import (
     inspect_index,
     YouTubeVideoResponse,
     FlashcardGeneration,
+    # SummarizationRequest,
+    # ImageSummaryRequest,
     QuizGeneration,
     Module,
     Plan,
@@ -53,12 +59,18 @@ from config import (
     youtube,
     index,
     youtube_index,
+    image_index,
+    IMAGE_DIM
 )
 import logging
 import json
 from typing import Optional, List
 from datetime import datetime
 from fastapi_utils.tasks import repeat_every
+import torch
+import tiktoken
+from transformers import CLIPProcessor, CLIPModel
+# import openai
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -395,33 +407,55 @@ def get_module_details(module_id: str):
         try:
             
             system_prompt = f"""
-                You are an AI assistant tasked with synthesizing a detailed and professional article based on the provided explanation text. 
+                You are an AI assistant tasked with synthesizing a detailed and professional article based on the provided explanation text.
                 The explanations are curated to include highly relevant information (relevance score > 0.85) and represent key insights about the topic.
-
-                Context:
+ 
+                **Context**:
                 - Module Title: {title}
                 - Module Description: {description}
-
+ 
                 **Purpose**:
-                Your goal is to generate a comprehensive and insightful article that educates readers on the topic. 
+                Your goal is to generate a comprehensive and insightful article that educates readers on the topic.
                 The article should be structured naturally and cohesively, presenting the information in a logical and engaging manner.
-
+ 
                 **Content Guidelines**:
                 1. Use all the provided explanation text, ensuring the original meaning and context are retained.
                 2. Highlight key points and elaborate where necessary to ensure clarity and understanding.
-                3. Avoid introducing external information or data outside of what is provided.
-
+                3. Include relevant Python code snippets and formulas to enhance the explanation. For instance:
+                    - If the topic involves concepts like linear regression, present the formula \( y = mx + c \), explain each component (e.g., \( y \) is the target variable, \( m \) is the slope, \( x \) is the input feature, and \( c \) is the intercept), and provide Python code snippets such as:
+                    ```python
+                    # Example: Linear regression implementation
+                    from sklearn.linear_model import LinearRegression
+ 
+                    # Data
+                    X = [[1], [2], [3]]
+                    y = [2, 4, 6]
+ 
+                    # Model training
+                    model = LinearRegression()
+                    model.fit(X, y)
+ 
+                    # Making predictions
+                    predictions = model.predict([[4]])
+                    print(predictions)
+                    ```
+                    - Include code snippets wherever relevant information is being generated or derived, and explain how the code interacts with the formula, breaking down its components.
+                    - Code snippets should not be restricted to specific topics like linear regression but should be included wherever necessary to illustrate concepts effectively and provide practical context.
+                4. Ensure the code snippets and formulas are properly formatted, seamlessly integrated, and relevant to the explanation. Avoid overloading the article with unnecessary technical content. Focus on clarity and context.
+                5. Do not introduce any extra context accept the one user has provided you with.
+ 
                 **Style**:
                 - Write in a professional and engaging tone suitable for an educational audience.
                 - Organize the content in a manner that flows logically, allowing readers to follow the topic easily.
                 - Use paragraphs, headings, or bullet points where necessary to improve readability.
                 - Ensure smooth transitions between ideas and sections for coherence.
-
+ 
                 **Additional Instructions**:
                 - Focus on clarity, coherence, and logical progression of ideas.
                 - Avoid unnecessary repetition and ensure the article stays on topic.
-
-                Provided Explanation Text:
+                - don't hallucinate, don't bullshit, have concrete answers. NO ifs, maybes
+ 
+                **Provided Explanation Text**:
                 {raw_explanation}
             """
 
@@ -456,6 +490,11 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
 
     try:
         logger.info("Fetching relevant YouTube video for module ID: %s", module_id)
+
+        module_title = cached_data["title"]
+        module_description = cached_data["description"]
+        module_detailed_explanation = cached_data["detailed_explanation"]
+
 
         module_title = cached_data["title"]
         module_description = cached_data["description"]
@@ -501,6 +540,15 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
         }
 
         # return {"video_url": video_url, "relevance_score": relevance_score}
+        transcript = fetch_video_transcript(best_match["metadata"]["video_id"]) or "Transcript unavailable."
+
+        # return {
+        #     "video_url": video_url,
+        #     "relevance_score": best_match["score"],
+        #     "transcript": transcript
+        # }
+
+        # return {"video_url": video_url, "relevance_score": relevance_score}
 
     except Exception as e:
         logger.error(f"Error in /get_relevant_youtube_video endpoint: {str(e)}")
@@ -509,6 +557,100 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
 logging.basicConfig(level=logging.DEBUG)  # Set the level to DEBUG or INFO
 logger = logging.getLogger(__name__)
 
+# @app.get("/get_image_urls_with_summaries/{module_id}")
+# def get_image_urls_with_summaries(module_id: str):
+#     """
+#     Retrieve image URLs based on the module ID and generate summaries for the images using OpenAI.
+#     """
+#     logging.info(f"Received request to fetch image URLs and summaries for module_id: {module_id}")
+#     connection = get_db_connection()
+#     try:
+#         # Step 1: Retrieve module details from the database
+#         logging.info("Attempting to fetch module details from the database.")
+#         cursor = connection.cursor()
+#         cursor.execute(
+#             "SELECT MODULE_ID, MODULE, TITLE, DESCRIPTION FROM MODULES WHERE MODULE_ID = %s",
+#             (module_id,)
+#         )
+#         module = cursor.fetchone()
+ 
+#         if not module:
+#             logging.warning(f"No module details found for module_id: {module_id}")
+#             return {"message": f"No details found for module ID: {module_id}"}
+ 
+#         logging.info(f"Module details retrieved successfully: {module}")
+#         title, description = module[2], module[3]
+ 
+#         # Step 2: Construct query text using title
+#         model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+#         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+#         query_text = f"{title}"
+#         query_embedding = generate_text_embedding(query_text, model, processor)
+#         logging.info(f"Constructed query text for embedding: {query_embedding}")
+ 
+#         # Step 3: Retrieve image URLs from Pinecone
+#         logging.info("Querying Pinecone for image URLs.")
+#         results = image_index.query(
+#             vector=query_embedding.tolist(),
+#             top_k=1,
+#             include_metadata=True
+#         )
+ 
+#         # Extract URLs from the results
+#         urls = [result['metadata']['url'] for result in results['matches'] if 'url' in result['metadata']]
+ 
+#         # Step 4: Summarize images using OpenAI
+#         summaries = []
+#         for url in urls:
+#             try:
+#                 # Summarize the image directly using OpenAI
+#                 logging.info(f"Summarizing image at URL: {url}")
+
+#                 response = client.chat.completions.create(
+#                     model="gpt-3.5-turbo",
+#                     messages=[
+#                         {"role": "system", "content": "You are an assistant that summarizes images and make sure to summarize it in short. Summarize the image relating it to the query text provided."},
+#                         {"role": "user", "content": f"Summarize the content of this image: {url} {query_text}"}
+#                     ]
+#                 )
+#                 summary = response.choices[0].message.content.strip()
+#                 # summary = response['choices'][0]['message']['content']
+#                 logging.info(f"Generated summary: {summary}")
+#             except Exception as e:
+#                 logging.error(f"Error summarizing image {url}: {e}")
+#                 summary = "Unable to summarize image."
+#             summaries.append({"url": url, "summary": summary})
+ 
+#         # Step 5: Format and return the response
+#         if not summaries:
+#             logging.info("No matching images found in Pinecone.")
+#             return {
+#                 "module_id": module_id,
+#                 "module": module[1],
+#                 "title": title,
+#                 "description": description,
+#                 "images": [],
+#                 "message": "No matching images found."
+#             }
+ 
+#         logging.info("Image URLs and summaries fetched successfully. Preparing response.")
+#         return {
+#             "module_id": module_id,
+#             "module": module[1],
+#             "title": title,
+#             "description": description,
+#             "images": summaries
+#         }
+ 
+#     except Exception as e:
+#         logging.error(f"Error processing module ID {module_id}: {str(e)}", exc_info=True)
+#         raise HTTPException(status_code=500, detail=f"Error processing module ID: {str(e)}")
+#     finally:
+#         logging.info("Closing database connection.")
+#         cursor.close()
+#         connection.close()
+  
+   
 
 @app.get("/generate_flashcards/{module_id}", response_model=FlashcardGeneration)
 async def generate_flashcards(
@@ -588,72 +730,72 @@ async def generate_flashcards(
         logger.error(f"Error in /generate_flashcards endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
     
-# @app.get("/generate_quiz/{module_id}", response_model=QuizGeneration)
-# async def generate_quiz(
-#     module_id: str,
-#     cached_data: dict = Depends(get_module_details),
-#     youtube_data: dict = Depends(get_relevant_youtube_video)
-# ):
-#     try:
-#         logger.info("Generating quiz for module ID: %s", module_id)
+@app.get("/generate_quiz/{module_id}", response_model=QuizGeneration)
+async def generate_quiz(
+    module_id: str,
+    cached_data: dict = Depends(get_module_details),
+    youtube_data: dict = Depends(get_relevant_youtube_video)
+):
+    try:
+        logger.info("Generating quiz for module ID: %s", module_id)
 
-#         # Extract module details and YouTube transcript
-#         module_detailed_explanation = cached_data["detailed_explanation"]
-#         transcript = youtube_data.get("transcript", "")
+        # Extract module details and YouTube transcript
+        module_detailed_explanation = cached_data["detailed_explanation"]
+        transcript = youtube_data.get("transcript", "")
 
-#         # Combine context for quiz generation
-#         context = (
-#             f"Detailed Explanation: {module_detailed_explanation}\n"
-#             f"Relevant YouTube Transcript: {transcript}\n\n"
-#         )
+        # Combine context for quiz generation
+        context = (
+            f"Detailed Explanation: {module_detailed_explanation}\n"
+            f"Relevant YouTube Transcript: {transcript}\n\n"
+        )
 
-#         system_prompt = (
-#             "You are an educational assistant. Based on the provided context, "
-#             "create a quiz with 5 multiple-choice questions. Each question should have "
-#             "four answer options, and one should be the correct answer. Output the quiz "
-#             "in a JSON format with each question as an object containing 'question', 'options', "
-#             "and 'correct_answer' keys. Strictly return a valid JSON output only. Do not include "
-#             "any introductory text, explanations, or comments. The response should look like this:\n"
-#             "[\n"
-#             "  {\"question\": \"What is question 1?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option A\"},\n"
-#             "  {\"question\": \"What is question 2?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option B\"},\n"
-#             "  ...\n"
-#             "]"
-#         )
+        system_prompt = (
+            "You are an educational assistant. Based on the provided context, "
+            "create a quiz with 5 multiple-choice questions. Each question should have "
+            "four answer options, and one should be the correct answer. Output the quiz "
+            "in a JSON format with each question as an object containing 'question', 'options', "
+            "and 'correct_answer' keys. Strictly return a valid JSON output only. Do not include "
+            "any introductory text, explanations, or comments. The response should look like this:\n"
+            "[\n"
+            "  {\"question\": \"What is question 1?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option A\"},\n"
+            "  {\"question\": \"What is question 2?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option B\"},\n"
+            "  ...\n"
+            "]"
+        )
 
-#         # Generate quiz via OpenAI
-#         response = client.chat.completions.create(
-#             model="gpt-3.5-turbo",
-#             messages=[
-#                 {"role": "system", "content": system_prompt},
-#                 {"role": "user", "content": context},
-#             ],
-#             max_tokens=750,
-#         )
+        # Generate quiz via OpenAI
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context},
+            ],
+            max_tokens=750,
+        )
 
-#         quiz_text = response.choices[0].message.content.strip()
+        quiz_text = response.choices[0].message.content.strip()
 
-#         # Parse the JSON-like response into question-answer objects
-#         import json
-#         quiz = []
-#         try:
-#             quiz = json.loads(quiz_text)  # Parse JSON-like response
-#             logger.debug("Successfully parsed JSON response for quiz.")
-#         except json.JSONDecodeError:
-#             logger.warning("Response not in JSON format; attempting manual parsing.")
+        # Parse the JSON-like response into question-answer objects
+        import json
+        quiz = []
+        try:
+            quiz = json.loads(quiz_text)  # Parse JSON-like response
+            logger.debug("Successfully parsed JSON response for quiz.")
+        except json.JSONDecodeError:
+            logger.warning("Response not in JSON format; attempting manual parsing.")
 
-#         # Log the generated questions for debugging
-#         for idx, question in enumerate(quiz):
-#             logger.debug(
-#                 "Question %d: %s", idx + 1, question.get("question")
-#             )
+        # Log the generated questions for debugging
+        for idx, question in enumerate(quiz):
+            logger.debug(
+                "Question %d: %s", idx + 1, question.get("question")
+            )
 
-#         # Return the quiz wrapped in QuizGeneration model
-#         return QuizGeneration(quiz=quiz)
+        # Return the quiz wrapped in QuizGeneration model
+        return QuizGeneration(quiz=quiz)
 
-#     except Exception as e:
-#         logger.error(f"Error in /generate_quiz endpoint: {str(e)}")
-#         raise HTTPException(status_code=500, detail="Internal Server Error")
+    except Exception as e:
+        logger.error(f"Error in /generate_quiz endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/")
 async def root():

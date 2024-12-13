@@ -5,12 +5,17 @@ from googleapiclient.discovery import build
 from pydantic import BaseModel
 from typing import Optional, List
 import logging
+from pinecone import Pinecone, ServerlessSpec
+from transformers import CLIPProcessor, CLIPModel
+import torch
+import time
 from syllabus import get_embedding
 from config import (
     client,
     youtube,
     index,
     youtube_index,
+    image_index
 )
 
 # Configure logging
@@ -122,7 +127,6 @@ def fetch_youtube_videos(query: str, max_results: int = 3) -> List[dict]:
         raise HTTPException(status_code=500, detail=f"Error fetching YouTube videos: {str(e)}")
 
 # Fetch video transcript
-
 def fetch_video_transcript(video_id: str) -> Optional[str]:
     try:
         logger.info("Fetching transcript for video ID: %s", video_id)
@@ -167,3 +171,126 @@ def upsert_to_pinecone(video_id: str, title: str, description: str, transcript_c
             ])
     except Exception as e:
         logger.error(f"Error upserting to Pinecone for video {video_id}: {str(e)}")
+
+# #---------image logic -------
+# # Generate embedding for the query text using CLIP
+# def generate_text_embedding(query_text: str, model: CLIPModel, processor: CLIPProcessor):
+#     """
+#     Generate embeddings for the query text using the CLIP model.
+#     """
+#     inputs = processor(text=query_text, return_tensors="pt")
+#     with torch.no_grad():
+#         embedding = model.get_text_features(**inputs).numpy().flatten()
+#     return embedding
+
+# # Query Pinecone and retrieve metadata
+# def retrieve_from_image_index(query_text: str):
+#     """
+#     Query the Pinecone image index and retrieve metadata based on the text embedding.
+#     """
+#     try:
+#         # Load CLIP model and processor
+#         model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+#         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+#         # Generate query embedding
+#         query_embedding = generate_text_embedding(query_text, model, processor)
+
+#         # Query the Pinecone image index
+#         results = image_index.query(
+#             vector=query_embedding.tolist(),
+#             top_k=5,
+#             include_metadata=True
+#         )
+
+#         # Extract URLs from the results
+#         image_urls = [result['metadata']['url'] for result in results['matches'] if 'url' in result['metadata']]
+
+#         return image_urls
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error querying image index: {str(e)}")
+    
+# def summarize_image_with_openai(image_url: str, module_title: str) -> str:
+#     """
+#     Summarize the content of an image using OpenAI's GPT-4, incorporating the module title.
+ 
+#     Args:
+#         image_url (str): The URL of the image to summarize.
+#         module_title (str): The title of the module associated with the image.
+ 
+#     Returns:
+#         str: The summary of the image content or an error message if it fails.
+#     """ 
+#     for attempt in range(3):  # Retry up to 3 times for transient errors
+#         try:
+#             # Log the start of the API call
+#             logging.info(f"Attempting OpenAI API call. Attempt {attempt + 1} for URL: {image_url}")
+ 
+#             # OpenAI ChatCompletion request
+#             response = client.ChatCompletion.create(
+#                 model="gpt-4",
+#                 messages=[
+#                     {"role": "system", "content": "You are an assistant that summarizes images using their URLs and module titles. Keep the summary concise."},
+#                     {"role": "user", "content": f"Summarize this image: {image_url} with the module title: {module_title}."}
+#                 ]
+#             )
+ 
+#             # Extract the summary
+#             summary = response["choices"][0]["message"]["content"]
+#             logging.info(f"Summary generated successfully for URL: {image_url}")
+#             return summary
+ 
+#         except client.error.RateLimitError as rate_err:
+#             # Handle rate limit errors by retrying after a short delay
+#             logging.warning(f"Rate limit error: {rate_err}. Retrying in 2 seconds...")
+#             time.sleep(2)  # Wait before retrying
+ 
+#         except client.error.APIConnectionError as conn_err:
+#             # Handle network or connection errors
+#             logging.error(f"Connection error: {conn_err}. Retrying in 2 seconds...")
+#             time.sleep(2)
+ 
+#         except client.error.InvalidRequestError as invalid_err:
+#             # Log invalid requests and break (no retry)
+#             logging.error(f"Invalid request: {invalid_err}")
+#             return "Error: Invalid request. Please check the inputs."
+ 
+#         except client.error.AuthenticationError as auth_err:
+#             # Log authentication errors and return immediately
+#             logging.error(f"Authentication error: {auth_err}")
+#             return "Error: Authentication failed. Please check the OpenAI API key."
+ 
+#         except client.error.OpenAIError as openai_err:
+#             # Handle other OpenAI-specific errors
+#             logging.error(f"OpenAI error: {openai_err}")
+#             return "Error: An issue occurred with the OpenAI API."
+ 
+#         except Exception as e:
+#             # Handle unexpected errors
+#             logging.error(f"Unexpected error: {e}", exc_info=True)
+#             return "Error generating summary. Please try again later."
+ 
+#     # If all retries fail
+#     logging.error(f"All retry attempts failed for URL: {image_url}")
+#     return "Error: Unable to generate summary after multiple attempts." 
+ 
+
+# def generate_image_summaries(image_urls: List[str]) -> List[dict]:
+#     """
+#     Helper function to summarize a list of image URLs.
+ 
+#     Args:
+#         image_urls (List[str]): A list of image URLs to summarize.
+ 
+#     Returns:
+#         List[dict]: A list of dictionaries with the image URL and its summary.
+#     """
+#     summaries = []
+#     for url in image_urls:
+#         try:
+#             summary = summarize_image_with_openai(url)
+#         except Exception as e:
+#             logging.error(f"Error summarizing image {url}: {e}")
+#             summary = "Unable to summarize image."
+#         summaries.append({"url": url, "summary": summary})
+#     return summaries

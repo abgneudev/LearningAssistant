@@ -31,6 +31,10 @@ jobs:
         echo "${{ secrets.EC2_SSH_KEY }}" > learning.pem
         chmod 600 learning.pem
 
+    - name: Add EC2 Host to Known Hosts
+      run: |
+        ssh-keyscan -H 3.22.249.244 >> ~/.ssh/known_hosts
+
     - name: Copy Airflow files to EC2
       run: |
         scp -i learning.pem -r Airflow/{docker-compose.yml,dags,plugins,requirements.txt} ubuntu@3.22.249.244:/home/ubuntu/Airflow/

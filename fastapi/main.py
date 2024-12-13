@@ -69,7 +69,7 @@ from datetime import datetime
 from fastapi_utils.tasks import repeat_every
 import torch
 import tiktoken
-from transformers import CLIPProcessor, CLIPModel
+# from transformers import CLIPProcessor, CLIPModel
 # import openai
 
 # Configure logging

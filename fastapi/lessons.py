@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import logging
 from pinecone import Pinecone, ServerlessSpec
-from transformers import CLIPProcessor, CLIPModel
+# from transformers import CLIPProcessor, CLIPModel
 import torch
 import time
 from syllabus import get_embedding

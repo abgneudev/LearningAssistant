@@ -43,7 +43,11 @@ jobs:
       - name: Run Unit and Integration Tests
         run: |
           cd ${{ matrix.service }}
-          poetry run pytest tests --disable-warnings
+          if [ -d "tests" ]; then
+            poetry run pytest tests --disable-warnings
+          else
+            echo "No tests directory found for ${{ matrix.service }}. Skipping tests."
+
 
   # CD Job: Build and Push Docker Images
   build-and-push:

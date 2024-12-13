@@ -13,7 +13,7 @@ Why Aivy?
 
 Architecture diagram for the same: 
 
-![Architecture Diagram](diagrams/images/architecture_diagram.png)
+![Architecture diagram](./diagram/research_tool_architecture.png)
 
 ## **Key Features**
 1. **Dynamic Lesson Plans**:

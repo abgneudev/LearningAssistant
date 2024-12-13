@@ -6,150 +6,117 @@ on:
       - main
 
 jobs:
-  # CI Job: Run Tests (Unit and Integration)
-  run-tests:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [fastapi, streamlit]
 
     steps:
-      # Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 
 
-      # Set up Python
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: 3.12
+    # Checkout code
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 
 
-      # Install Poetry
-      - name: Install Poetry
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install poetry
+    # Set up Docker Buildx
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-      # Install dependencies
-      - name: Install dependencies
-        run: |
-          cd ${{ matrix.service }}
-          poetry install
-          poetry run pip install pytest
+    # Log in to DockerHub
+    - name: Log in to DockerHub
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      run: |
+        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-      # Run Unit and Integration Tests
-      - name: Run Unit and Integration Tests
-        run: |
-          cd ${{ matrix.service }}
-          if [ -d "tests" ]; then
-            poetry run pytest tests --disable-warnings
-          else
-            echo "No tests directory found for ${{ matrix.service }}. Skipping tests."
+    # Build and push FastAPI image
+    - name: Build and push FastAPI image
+      run: |
+        docker buildx build \
+          --platform linux/amd64 \
+          --push \
+          --cache-from=type=registry,ref=${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
+          --cache-to=type=inline \
+          --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
+          --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
+          ${{ github.workspace }}/fastapi
 
+    # Build and push Streamlit Image
+    - name: Build and push Streamlit image
+      run: |
+        docker buildx build \
+          --platform linux/amd64 \
+          --push \
+          --cache-from=type=registry,ref=${{ secrets.DOCKER_USERNAME }}/streamlit:latest \
+          --cache-to=type=inline \
+          --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:latest \
+          --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }} \
+          ./streamlit
 
-  # CD Job: Build and Push Docker Images
-  build-and-push:
-    needs: run-tests
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [fastapi, streamlit]
+    # Create .env file for secrets
+    - name: Create .env file
+      run: |
+        cat <<EOF > .env
+        DEPLOYED_URL=${{ secrets.DEPLOYED_URL }}
+        SECRET_KEY=${{ secrets.SECRET_KEY }}
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}
+        INDEX_NAME=${{ secrets.INDEX_NAME }}
+        IMG_INDEX_NAME=${{ secrets.IMG_INDEX_NAME }}
+        YOUTUBE_INDEX=${{ secrets.YOUTUBE_INDEX }}
+        DIMENSION=${{ secrets.DIMENSION }}
+        METRIC=${{ secrets.METRIC }}
+        SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }}
+        SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }}
+        SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_WAREHOUSE=${{ secrets.SNOWFLAKE_WAREHOUSE }}
+        SNOWFLAKE_DATABASE=${{ secrets.SNOWFLAKE_DATABASE }}
+        SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}
+        YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}
+        CLOUD_PROVIDER=${{ secrets.CLOUD_PROVIDER }}
+        REGION=${{ secrets.REGION }}
+        IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}
+        EOF
 
-    steps:
-      # Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 
+    - name: Transfer files to EC2
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: |
+          .env
+          docker-compose.yml
+        target: /home/ubuntu/
 
-      # Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+    - name: Deploy on EC2
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          docker network inspect learningassistant_app-network || docker network create learningassistant_app-network
+          docker-compose pull
+          docker-compose up -d --remove-orphans
 
-      # Log in to DockerHub
-      - name: Log in to DockerHub
-        run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+    # Verify Deployment
+    - name: Verify FastAPI service health
+      run: |
+        retries=10
+        delay=10
+        for i in $(seq 1 $retries); do
+          echo "Checking FastAPI service health (attempt $i/$retries)..."
+          curl -f http://3.22.249.244:8000/docs && exit 0 || sleep $delay
+        done
+        echo "FastAPI service health check failed" && exit 1
 
-      # Build and push Docker image
-      - name: Build and push Docker image
-        run: |
-          docker buildx build \
-            --platform linux/amd64 \
-            --push \
-            --cache-from=type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:latest \
-            --cache-to=type=inline \
-            --tag ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:latest \
-            --tag ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:${{ github.sha }} \
-            ${{ github.workspace }}/${{ matrix.service }}
-
-  # CD Job: Deploy to EC2
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [fastapi, streamlit]
-
-    steps:
-      # Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 
-
-      # Copy .env file to EC2
-      - name: Copy .env file to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: .env
-          target: /home/ubuntu/
-
-      # Copy docker-compose.yml to EC2
-      - name: Copy docker-compose.yml to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ./docker-compose.yml
-          target: /home/ubuntu/
-
-      # Deploy on EC2
-      - name: Deploy on EC2
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            docker network inspect learningassistant_app-network || docker network create learningassistant_app-network
-            docker-compose pull
-            docker-compose up -d --remove-orphans
-
-      # Health Check for FastAPI
-      - name: Check FastAPI service health
-        if: matrix.service == 'fastapi'
-        run: |
-          retries=10
-          delay=10
-          for i in $(seq 1 $retries); do
-            echo "Checking FastAPI service health (attempt $i/$retries)..."
-            curl -f http://3.22.249.244:8000/docs && break || sleep $delay
-          done
-
-      # Health Check for Streamlit
-      - name: Check Streamlit service health
-        if: matrix.service == 'streamlit'
-        run: |
-          retries=10
-          delay=10
-          for i in $(seq 1 $retries); do
-            echo "Checking Streamlit service health (attempt $i/$retries)..."
-            curl -f http://3.22.249.244:8501 && break || sleep $delay
-          done
+    - name: Verify Streamlit service health
+      run: |
+        retries=10
+        delay=10
+        for i in $(seq 1 $retries); do
+          echo "Checking Streamlit service health (attempt $i/$retries)..."
+          curl -f http://3.22.249.244:8501 && exit 0 || sleep $delay
+        done
+        echo "Streamlit service health check failed" && exit 1

@@ -39,7 +39,7 @@ jobs:
 
     - name: Copy Airflow files to EC2
       run: |
-        scp -i learning.pem -r Airflow/{docker-compose.yml,dags,plugins,requirements.txt} ubuntu@3.22.249.244:/home/ubuntu/Airflow/
+        scp -i learning.pem -r Airflow ubuntu@3.22.249.244:/home/ubuntu/
 
     # Deploy Airflow Services on EC2
     - name: Deploy Airflow Services

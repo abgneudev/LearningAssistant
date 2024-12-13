@@ -7,18 +7,24 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: self-hosted  # Use the self-hosted runner
+    runs-on: ubuntu-latest
 
     steps:
+
     # Step 1: Checkout code
     - name: Checkout code
       uses: actions/checkout@v3
       with:
-        fetch-depth: 0  # Ensure all files are checked out
+        fetch-depth: 0
 
     # Step 2: Print working directory
     - name: Print working directory
       run: pwd
+    
+    - name: Install Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
 
     - name: Deploy Airflow Services
       run: |
@@ -30,7 +36,7 @@ jobs:
     - name: Debug FastAPI build context
       run: |
         echo "Debugging FastAPI build context..."
-        ls -l /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi
+        ls -l ${{ github.workspace }}/fastapi
 
     # Step 4: Free up Disk Space
     - name: Free up disk space
@@ -56,8 +62,8 @@ jobs:
     - name: Build FastAPI image using explicit Dockerfile
       run: |
         docker buildx build \
-          --file /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi/Dockerfile \
-          /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi
+          --file ${{ github.workspace }}/fastapi/Dockerfile \
+          ${{ github.workspace }}/fastapi
 
     # Step 8: Build and push FastAPI image
     - name: Build and push FastAPI image
@@ -69,7 +75,7 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
-          /home/ubuntu/actions-runner/_work/LearningAssistant/LearningAssistant/fastapi
+          ${{ github.workspace }}/fastapi
 
     # Step 9: Build and push Streamlit Image
     - name: Build and push Streamlit image

@@ -116,7 +116,7 @@ jobs:
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking FastAPI service health (attempt $i/$retries)..."
-          curl -f http://3.22.249.244:8000/docs && break || sleep $delay
+          curl -f http://$EC2_HOST:8000/docs && break || sleep $delay
         done
 
     - name: Check Streamlit service health
@@ -125,5 +125,5 @@ jobs:
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking Streamlit service health (attempt $i/$retries)..."
-          curl -f http://3.22.249.244:8501 && break || sleep $delay
+          curl -f http://$EC2_HOST:8501 && break || sleep $delay
         done

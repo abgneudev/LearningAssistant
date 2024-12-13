@@ -114,6 +114,10 @@ jobs:
         echo "REGION=${{ secrets.REGION }}" >> .env      
         echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env  
 
+    - name: Copy .env file to EC2
+      run: |
+        scp -i learning.pem .env ubuntu@3.22.249.244:/home/ubuntu/LearningAssistant/
+
     # Ensure Docker Network Exists
     - name: Ensure Docker Network Exists
       run: |

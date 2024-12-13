@@ -10,12 +10,8 @@ jobs:
     runs-on: self-hosted  # Use the self-hosted runner
 
     steps:
-<<<<<<< HEAD
 
     # Checkout code
-=======
-    # Step 1: Checkout code
->>>>>>> parent of 3b076e3 (setup github runner for better performance)
     - name: Checkout code
       uses: actions/checkout@v3
       with:

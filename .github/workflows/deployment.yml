@@ -26,6 +26,12 @@ jobs:
         with:
           python-version: 3.12
 
+      # Install Poetry
+      - name: Install Poetry
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install poetry
+
       # Install dependencies
       - name: Install dependencies
         run: |
@@ -36,7 +42,7 @@ jobs:
       - name: Run Unit and Integration Tests
         run: |
           cd ${{ matrix.service }}
-          pytest tests --disable-warnings
+          poetry run pytest tests --disable-warnings
 
   # CD Job: Build and Push Docker Images
   build-and-push:

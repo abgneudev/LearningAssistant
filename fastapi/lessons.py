@@ -7,7 +7,7 @@ from typing import Optional, List
 import logging
 from pinecone import Pinecone, ServerlessSpec
 # from transformers import CLIPProcessor, CLIPModel
-import torch
+# import torch
 import time
 from syllabus import get_embedding
 from config import (

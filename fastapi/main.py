@@ -16,6 +16,7 @@ from lessons import (
     summarize_text,
     generate_embedding,
     chunk_text,
+    summarize_text_arxiv
     # retrieve_from_image_index,
     # generate_text_embedding,
     # summarize_image_with_openai, 
@@ -33,6 +34,7 @@ from utils import (
     inspect_index,
     YouTubeVideoResponse,
     FlashcardGeneration,
+    ArxivPaperResponse,
     # SummarizationRequest,
     # ImageSummaryRequest,
     QuizGeneration,
@@ -67,10 +69,14 @@ import json
 from typing import Optional, List
 from datetime import datetime
 from fastapi_utils.tasks import repeat_every
-import torch
+# import torch
 import tiktoken
-from transformers import CLIPProcessor, CLIPModel
+# from transformers import CLIPProcessor, CLIPModel
 # import openai
+
+import xmltodict
+import requests
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -552,6 +558,80 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
 
     except Exception as e:
         logger.error(f"Error in /get_relevant_youtube_video endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
+ARXIV_API_URL = "http://export.arxiv.org/api/query"
+
+@app.get("/get_relevant_arxiv_paper/{module_id}", response_model=List[ArxivPaperResponse])
+async def get_relevant_arxiv_paper(module_id: str, cached_data: dict = Depends(get_module_details)):
+    try:
+        logger.info("Fetching relevant Arxiv papers for module ID: %s", module_id)
+
+        # Extract module details from cached data
+        module_title = cached_data["title"]
+        module_description = cached_data["description"]
+        module_detailed_explanation = cached_data["detailed_explanation"]
+
+        combined_text = f"{module_title} {module_description} {module_detailed_explanation}"
+
+        # Step 1: Summarize input text
+        summarized_text = summarize_text_arxiv(combined_text)
+
+        # Step 2: Fetch papers from Arxiv API
+        params = {
+            "search_query": f"all:{summarized_text}",
+            "start": 0,
+            "max_results": 2,
+            "sortBy": "relevance",
+            "sortOrder": "descending"
+        }
+        response = requests.get(ARXIV_API_URL, params=params)
+
+        if response.status_code != 200:
+            logger.warning("Failed to fetch data from Arxiv. Status code: %d", response.status_code)
+            raise HTTPException(status_code=500, detail="Failed to fetch data from Arxiv.")
+
+        # Parse the XML response
+        data = xmltodict.parse(response.text)
+        entries = data.get('feed', {}).get('entry', [])
+
+        # If a single entry, convert to list for uniform processing
+        if isinstance(entries, dict):
+            entries = [entries]
+
+        # Step 3: Process entries
+        results = []
+        for entry in entries:
+            authors = entry.get('author', [])
+            if isinstance(authors, dict):
+                authors = [authors]
+            author_names = [author.get('name', '') for author in authors]
+
+            # Summarize paper summary
+            paper_summary = entry.get('summary', '').replace('\n', ' ').strip()
+            summarized_paper_summary = summarize_text(paper_summary) if paper_summary else "Summary unavailable."
+
+            paper = {
+                "title": entry.get('title', '').replace('\n', ' ').strip(),
+                "summary": summarized_paper_summary,
+                "authors": author_names,
+                "published": entry.get('published', ''),
+                "link": entry.get('id', ''),
+                "pdf_url": next((
+                    link.get('@href', '') for link in entry.get('link', [])
+                    if isinstance(link, dict) and link.get('@title') == 'pdf'
+                ), None)
+            }
+            results.append(paper)
+
+        if not results:
+            logger.warning("No relevant papers found for query: %s", summarized_text)
+            raise HTTPException(status_code=404, detail="No relevant papers found.")
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Error in /get_relevant_arxiv_paper endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 logging.basicConfig(level=logging.DEBUG)  # Set the level to DEBUG or INFO

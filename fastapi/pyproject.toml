@@ -25,6 +25,7 @@ tiktoken = "^0.8.0"
 scikit-learn = "^1.6.0"
 numpy = "^2.2.0"
 pinecone = "^5.4.2"
+xmltodict = "^0.14.2"
  
  
 [build-system]

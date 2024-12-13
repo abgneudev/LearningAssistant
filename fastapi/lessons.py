@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 import logging
 from pinecone import Pinecone, ServerlessSpec
-from transformers import CLIPProcessor, CLIPModel
-import torch
+# from transformers import CLIPProcessor, CLIPModel
+# import torch
 import time
 from syllabus import get_embedding
 from config import (
@@ -171,6 +171,26 @@ def upsert_to_pinecone(video_id: str, title: str, description: str, transcript_c
             ])
     except Exception as e:
         logger.error(f"Error upserting to Pinecone for video {video_id}: {str(e)}")
+
+def summarize_text_arxiv(text: str) -> str:
+    """
+    Summarizes the text using OpenAI's GPT API with the preferred method.
+    
+    Args:
+        text (str): The full summary text.
+    
+    Returns:
+        str: A summarized version of the text.
+    """
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": f"Summarize the following text to 40-80 words:\n{text}"}]
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error in summarize_text: {str(e)}")
+        return "Summary not available due to an error."
 
 # #---------image logic -------
 # # Generate embedding for the query text using CLIP

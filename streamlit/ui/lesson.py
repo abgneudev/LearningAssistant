@@ -110,6 +110,34 @@ def main():
             st.error("Failed to fetch relevant YouTube video.")
     except Exception as e:
         st.error(f"An error occurred while fetching the YouTube video: {e}")
+
+    try:
+        with st.spinner("Fetching relevant Arxiv papers..."):
+            # Make a request to your FastAPI endpoint
+            arxiv_response = requests.get(
+                f"{DEPLOY_URL}/get_relevant_arxiv_paper/{selected_module_id}"
+            )
+
+        if arxiv_response.status_code == 200:
+            arxiv_data = arxiv_response.json()
+            if arxiv_data:
+                st.markdown("### Relevant Arxiv Papers")
+                for paper in arxiv_data:
+                    st.markdown(f"**Title:** {paper['title']}")
+                    st.markdown(f"**Authors:** {', '.join(paper['authors'])}")
+                    st.markdown(f"**Published Date:** {paper['published']}")
+                    st.markdown(f"**Summary:** {paper['summary']}")
+                    st.markdown(f"[Read More]({paper['link']})")
+                    if paper.get("pdf_url"):
+                        st.markdown(f"[Download PDF]({paper['pdf_url']})")
+                    st.markdown("---")
+            else:
+                st.warning("No relevant papers found for this module.")
+        else:
+            st.error("Failed to fetch relevant Arxiv papers.")
+
+    except Exception as e:
+        st.error(f"An error occurred while fetching Arxiv papers: {e}")
  
 
     if video_response.status_code == 200 and video_data.get("video_url"):

@@ -12,7 +12,7 @@ st.set_page_config(layout="wide")
 load_dotenv()
 
 # FastAPI URL from environment variables
-DEPLOYED_URL = os.getenv("DEPLOYED_URL", "http://127.0.0.1:8000")
+DEPLOYED_URL = os.getenv("DEPLOY_URL", "http://127.0.0.1:8000")
 
 def user_signup(username, password):
     """

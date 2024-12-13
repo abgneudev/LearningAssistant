@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Get the FastAPI URL from environment variables
-DEPLOYED_URL = os.getenv("DEPLOYED_URL", "http://127.0.0.1:8000")
+DEPLOYED_URL = os.getenv("DEPLOY_URL", "http://127.0.0.1:8000")
 
 def main():
     st.title("Saved Plans")

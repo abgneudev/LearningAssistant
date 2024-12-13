@@ -2,16 +2,16 @@ import streamlit as st
 import requests
 import os
 from dotenv import load_dotenv
-
+ 
 # Load environment variables
 load_dotenv()
-
+ 
 # Get the FastAPI URL from environment variables
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
-
+ 
 def main():
     st.title("Lesson Details")
-
+ 
     # Ensure username, access_token, and selected_module_id are available in session state
     if (
         "username" not in st.session_state
@@ -20,10 +20,10 @@ def main():
     ):
         st.error("You are not logged in or no module was selected. Please go back and select a module.")
         return
-
+ 
     access_token = st.session_state["access_token"]
     selected_module_id = st.session_state["selected_module_id"]
-
+ 
     # Fetch details for the selected module from the backend
     try:
         response = requests.get(
@@ -41,30 +41,59 @@ def main():
     except Exception as e:
         st.error(f"An error occurred: {e}")
         return
-
+ 
     # Display the module details
     st.markdown(f"## Module {module_details.get('module')}: {module_details.get('title')}")
     st.write(module_details.get("description", "No description available."))
-
+ 
+    # Add a back button to navigate back to the plan page
+    if st.button("Back to Plans"):
+        del st.session_state["selected_module_id"]
+        st.session_state["page"] = "plans"
+        st.rerun()
+ 
     # Display detailed explanation as an article
     detailed_explanation = module_details.get("detailed_explanation", "No detailed explanation available.")
     st.markdown("### Detailed Explanation")
     paragraphs = detailed_explanation.split("\n\n")  # Split into paragraphs by double line breaks
     for paragraph in paragraphs:
         st.markdown(paragraph.strip())  # Render each paragraph as Markdown with proper spacing
-
-    # Add a back button to navigate back to the plan page
-    if st.button("Back to Plans"):
-        del st.session_state["selected_module_id"]
-        st.session_state["page"] = "planner"
-        st.rerun()
-
+ 
+    # Fetch and display related images
+    try:
+        st.markdown("### Related Images with Summaries")
+        image_response = requests.get(
+            f"{FASTAPI_URL}/get_image_urls_with_summaries/{selected_module_id}",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if image_response.status_code == 200:
+            image_data = image_response.json()
+            if "images" in image_data:
+                images = image_data["images"]
+                if images:
+                    for item in images:
+                        url = item.get("url")
+                        summary = item.get("summary")
+                        if url:
+                            # Display the image with a caption for the summary
+                            st.image(url, caption=summary or "No summary available", use_container_width=True)
+                        else:
+                            st.warning("Invalid image URL.")
+                else:
+                    st.info("No related images found for this module.")
+            else:
+                st.error("Unexpected response format for image data.")
+        else:
+            st.error(f"Failed to retrieve images for this module. Status Code: {image_response.status_code}")
+    except Exception as e:
+        st.error(f"An error occurred while fetching images: {e}")
+ 
+    # Fetch and display the most relevant YouTube video
     try:
         with st.spinner("Fetching the most relevant YouTube video..."):
             video_response = requests.get(
                 f"{FASTAPI_URL}/get_relevant_youtube_video/{selected_module_id}"
             )
-
         if video_response.status_code == 200:
             video_data = video_response.json()
             if video_data["video_url"]:
@@ -77,6 +106,65 @@ def main():
             st.error("Failed to fetch relevant YouTube video.")
     except Exception as e:
         st.error(f"An error occurred while fetching the YouTube video: {e}")
+ 
+    if video_response.status_code == 200 and video_data.get("video_url"):
+        try:
+            with st.spinner("Generating flashcards..."):
+                flashcards_response = requests.get(f"{FASTAPI_URL}/generate_flashcards/{selected_module_id}")
+            if flashcards_response.status_code == 200:
+                # Parse the JSON response
+                flashcards_data = flashcards_response.json()  # Expecting a nested JSON structure
+                flashcards = flashcards_data.get("flashcards", [])  # Extract the list of flashcards
+                if flashcards:
+                    # st.subheader(f"Flashcards for Module ID: {selected_module_id}")
+                    st.subheader(f"Flashcards")
+                    for i, flashcard in enumerate(flashcards):
+                        question = flashcard.get("question", "Question not available.")
+                        answer = flashcard.get("answer", "Answer not available.")
+                        # Display each flashcard in a clean format
+                        st.markdown(f"**Flashcard {i+1}**")
+                        st.markdown(f"**Q: {question}**")
+                        st.markdown(f"**A: {answer}**")
+                        st.markdown("---")  # Separator for clarity
+                else:
+                    st.warning("No flashcards generated. Please try again.")
+            else:
+                st.error("Failed to generate flashcards. Please check the module ID or try again later.")
+        except Exception as e:
+            st.error(f"An error occurred while generating flashcards: {e}")
 
+    # # Add a button to generate flashcards in the main content area
+    # st.markdown("### Generate Flashcards")
+    # if st.button("Generate Flashcards"):
+    #     if selected_module_id:
+    #         try:
+    #             with st.spinner("Generating flashcards..."):
+    #                 flashcards_response = requests.get(f"{FASTAPI_URL}/generate_flashcards/{selected_module_id}")
+    #             if flashcards_response.status_code == 200:
+    #                 # Parse the JSON response
+    #                 flashcards_data = flashcards_response.json()  # Expecting a nested JSON structure
+    #                 flashcards = flashcards_data.get("flashcards", [])  # Extract the list of flashcards
+    #                 if flashcards:
+    #                     st.subheader("Flashcards")
+    #                     for i, flashcard in enumerate(flashcards):
+    #                         question = flashcard.get("question", "Question not available.")
+    #                         answer = flashcard.get("answer", "Answer not available.")
+    #                         # Display question
+    #                         st.markdown(f"**Flashcard {i + 1}**")
+    #                         st.markdown(f"**Q: {question}**")
+    #                         # Add a button to reveal the answer
+    #                         if st.button(f"Show Answer for Flashcard {i + 1}", key=f"answer_btn_{i}"):
+    #                             st.markdown(f"**A: {answer}**")
+    #                         st.markdown("---")  # Separator for clarity
+    #                 else:
+    #                     st.warning("No flashcards generated. Please try again.")
+    #             else:
+    #                 st.error("Failed to generate flashcards. Please check the module ID or try again later.")
+    #         except Exception as e:
+    #             st.error(f"An error occurred while generating flashcards: {e}")
+    #     else:
+    #         st.warning("Please enter a Module ID to generate flashcards.")
+ 
 if __name__ == "__main__":
     main()
+ 

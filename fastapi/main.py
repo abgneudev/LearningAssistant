@@ -67,7 +67,7 @@ import json
 from typing import Optional, List
 from datetime import datetime
 from fastapi_utils.tasks import repeat_every
-import torch
+# import torch
 import tiktoken
 # from transformers import CLIPProcessor, CLIPModel
 # import openai

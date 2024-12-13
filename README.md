@@ -143,10 +143,13 @@ streamlit run app.py
 ```
 
 ---
+You can access the related files to this project here:
+
+Documentation 
+Deployed fastapi 
+Deployed streamlit 
+Video link 
 
 ## **Conclusion**
 This modular project integrates Airflow, FastAPI, and Streamlit to provide a dynamic learning assistant. With separate environments and comprehensive testing, it is scalable, efficient, and user-friendly.
 
----
-
-Let me know if you'd like any part of this adjusted!

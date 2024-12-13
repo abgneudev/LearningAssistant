@@ -23,7 +23,7 @@ def main():
  
     access_token = st.session_state["access_token"]
     selected_module_id = st.session_state["selected_module_id"]
- 
+
     # Fetch details for the selected module from the backend
     try:
         response = requests.get(
@@ -45,11 +45,15 @@ def main():
     # Display the module details
     st.markdown(f"## Module {module_details.get('module')}: {module_details.get('title')}")
     st.write(module_details.get("description", "No description available."))
- 
+
     # Add a back button to navigate back to the plan page
     if st.button("Back to Plans"):
         del st.session_state["selected_module_id"]
         st.session_state["page"] = "plans"
+        st.rerun()
+
+    if st.button("Take Quiz"):
+        st.session_state["page"] = "quiz"  # Switch to Quiz page
         st.rerun()
  
     # Display detailed explanation as an article
@@ -60,33 +64,33 @@ def main():
         st.markdown(paragraph.strip())  # Render each paragraph as Markdown with proper spacing
  
     # Fetch and display related images
-    try:
-        st.markdown("### Related Images with Summaries")
-        image_response = requests.get(
-            f"{DEPLOYED_URL}/get_image_urls_with_summaries/{selected_module_id}",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        if image_response.status_code == 200:
-            image_data = image_response.json()
-            if "images" in image_data:
-                images = image_data["images"]
-                if images:
-                    for item in images:
-                        url = item.get("url")
-                        summary = item.get("summary")
-                        if url:
-                            # Display the image with a caption for the summary
-                            st.image(url, caption=summary or "No summary available", use_container_width=True)
-                        else:
-                            st.warning("Invalid image URL.")
-                else:
-                    st.info("No related images found for this module.")
-            else:
-                st.error("Unexpected response format for image data.")
-        else:
-            st.error(f"Failed to retrieve images for this module. Status Code: {image_response.status_code}")
-    except Exception as e:
-        st.error(f"An error occurred while fetching images: {e}")
+    # try:
+    #     st.markdown("### Related Images with Summaries")
+    #     image_response = requests.get(
+    #         f"{DEPLOYED_URL}/get_image_urls_with_summaries/{selected_module_id}",
+    #         headers={"Authorization": f"Bearer {access_token}"}
+    #     )
+    #     if image_response.status_code == 200:
+    #         image_data = image_response.json()
+    #         if "images" in image_data:
+    #             images = image_data["images"]
+    #             if images:
+    #                 for item in images:
+    #                     url = item.get("url")
+    #                     summary = item.get("summary")
+    #                     if url:
+    #                         # Display the image with a caption for the summary
+    #                         st.image(url, caption=summary or "No summary available", use_container_width=True)
+    #                     else:
+    #                         st.warning("Invalid image URL.")
+    #             else:
+    #                 st.info("No related images found for this module.")
+    #         else:
+    #             st.error("Unexpected response format for image data.")
+    #     else:
+    #         st.error(f"Failed to retrieve images for this module. Status Code: {image_response.status_code}")
+    # except Exception as e:
+    #     st.error(f"An error occurred while fetching images: {e}")
  
     # Fetch and display the most relevant YouTube video
     try:
@@ -107,6 +111,7 @@ def main():
     except Exception as e:
         st.error(f"An error occurred while fetching the YouTube video: {e}")
  
+
     if video_response.status_code == 200 and video_data.get("video_url"):
         try:
             with st.spinner("Generating flashcards..."):
@@ -116,16 +121,30 @@ def main():
                 flashcards_data = flashcards_response.json()  # Expecting a nested JSON structure
                 flashcards = flashcards_data.get("flashcards", [])  # Extract the list of flashcards
                 if flashcards:
-                    # st.subheader(f"Flashcards for Module ID: {selected_module_id}")
-                    st.subheader(f"Flashcards")
+                    st.subheader("Flashcards")
                     for i, flashcard in enumerate(flashcards):
                         question = flashcard.get("question", "Question not available.")
                         answer = flashcard.get("answer", "Answer not available.")
-                        # Display each flashcard in a clean format
-                        st.markdown(f"**Flashcard {i+1}**")
-                        st.markdown(f"**Q: {question}**")
-                        st.markdown(f"**A: {answer}**")
-                        st.markdown("---")  # Separator for clarity
+                        
+                        # Use st.container for the box layout
+                        with st.container():
+                            st.markdown(
+                                f"""
+                                <div style="
+                                    border: 2px solid #ddd; 
+                                    border-radius: 10px; 
+                                    padding: 15px; 
+                                    background-color: #f9f9f9; 
+                                    color: #333; 
+                                    font-family: Arial, sans-serif;
+                                    margin-bottom: 10px;">
+                                    <p><strong>Flashcard {i+1}</strong></p>
+                                    <p><strong>Q:</strong> {question}</p>
+                                    <p><strong>A:</strong> {answer}</p>
+                                </div>
+                                """, 
+                                unsafe_allow_html=True
+                            )
                 else:
                     st.warning("No flashcards generated. Please try again.")
             else:

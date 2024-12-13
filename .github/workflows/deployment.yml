@@ -23,11 +23,15 @@ jobs:
 
     # Log in to DockerHub
     - name: Log in to DockerHub
-      env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       run: |
-        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    # Build FastAPI Image (using direct Dockerfile reference)
+    - name: Build FastAPI image using explicit Dockerfile
+      run: |
+        docker buildx build \
+          --file ${{ github.workspace }}/fastapi/Dockerfile \
+          ${{ github.workspace }}/fastapi
 
     # Build and push FastAPI image
     - name: Build and push FastAPI image
@@ -41,7 +45,7 @@ jobs:
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
           ${{ github.workspace }}/fastapi
 
-    # Build and push Streamlit image
+    # Build and push Streamlit Image
     - name: Build and push Streamlit image
       run: |
         docker buildx build \
@@ -51,64 +55,50 @@ jobs:
           --cache-to=type=inline \
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:latest \
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }} \
-          ${{ github.workspace }}/streamlit
+          ./streamlit
 
     # Create .env file for secrets
     - name: Create .env file
       run: |
-        cat <<EOF > .env
-        DEPLOYED_URL=${{ secrets.DEPLOYED_URL }}
-        SECRET_KEY=${{ secrets.SECRET_KEY }}
-        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-        PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}
-        INDEX_NAME=${{ secrets.INDEX_NAME }}
-        IMG_INDEX_NAME=${{ secrets.IMG_INDEX_NAME }}
-        YOUTUBE_INDEX=${{ secrets.YOUTUBE_INDEX }}
-        DIMENSION=${{ secrets.DIMENSION }}
-        METRIC=${{ secrets.METRIC }}
-        SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }}
-        SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }}
-        SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }}
-        SNOWFLAKE_WAREHOUSE=${{ secrets.SNOWFLAKE_WAREHOUSE }}
-        SNOWFLAKE_DATABASE=${{ secrets.SNOWFLAKE_DATABASE }}
-        SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}
-        YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}
-        CLOUD_PROVIDER=${{ secrets.CLOUD_PROVIDER }}
-        REGION=${{ secrets.REGION }}
-        IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}
-        EOF
+        echo "DEPLOYED_URL=${{ secrets.DEPLOYED_URL }}" > .env
+        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+        echo "PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}" >> .env
+        echo "INDEX_NAME=${{ secrets.INDEX_NAME }}" >> .env
+        echo "IMG_INDEX_NAME=${{ secrets.IMG_INDEX_NAME }}" >> .env
+        echo "YOUTUBE_INDEX=${{ secrets.YOUTUBE_INDEX }}" >> .env
+        echo "DIMENSION=${{ secrets.DIMENSION }}" >> .env
+        echo "METRIC=${{ secrets.METRIC }}" >> .env
+        echo "SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }}" >> .env
+        echo "SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }}" >> .env
+        echo "SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }}" >> .env
+        echo "SNOWFLAKE_WAREHOUSE=${{ secrets.SNOWFLAKE_WAREHOUSE }}" >> .env
+        echo "SNOWFLAKE_DATABASE=${{ secrets.SNOWFLAKE_DATABASE }}" >> .env
+        echo "SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}" >> .env
+        echo "YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}" >> .env
+        echo "CLOUD_PROVIDER=${{ secrets.CLOUD_PROVIDER }}" >> .env 
+        echo "REGION=${{ secrets.REGION }}" >> .env      
+        echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env  
 
-    # Transfer files to EC2
-    # Debug file existence
-    - name: Debug file existence
-      run: |
-        echo "Listing current directory files:"
-        ls -la
-        echo "Displaying contents of .env:"
-        cat .env || echo ".env file not found"
-
-    # Transfer files to EC2
-    - name: Transfer files to EC2
+    - name: Copy .env file to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
-        source: ./.env,./docker-compose.yml
+        source: .env
         target: /home/ubuntu/
 
-
-    # Ensure necessary folders exist on EC2
-    - name: Prepare EC2 environment
-      uses: appleboy/ssh-action@v0.1.7
+    
+    - name: Copy docker-compose.yml to EC2
+      uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          mkdir -p /home/ubuntu/fastapi /home/ubuntu/streamlit
+        source: ./docker-compose.yml
+        target: /home/ubuntu/
 
-    # Deploy on EC2
     - name: Deploy on EC2
       uses: appleboy/ssh-action@v0.1.7
       with:
@@ -121,22 +111,20 @@ jobs:
           docker-compose up -d --remove-orphans
 
     # Verify Deployment
-    - name: Verify FastAPI service health
+    - name: Check FastAPI service health
       run: |
         retries=10
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking FastAPI service health (attempt $i/$retries)..."
-          curl -f http://3.22.249.244:8000/docs && exit 0 || sleep $delay
+          curl -f http://3.22.249.244:8000/docs && break || sleep $delay
         done
-        echo "FastAPI service health check failed" && exit 1
 
-    - name: Verify Streamlit service health
+    - name: Check Streamlit service health
       run: |
         retries=10
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking Streamlit service health (attempt $i/$retries)..."
-          curl -f http://3.22.249.244:8501 && exit 0 || sleep $delay
+          curl -f http://3.22.249.244:8501 && break || sleep $delay
         done
-        echo "Streamlit service health check failed" && exit 1

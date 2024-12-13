@@ -11,13 +11,13 @@ jobs:
 
     steps:
 
-    # Step 1: Checkout code
+    # Checkout code
     - name: Checkout code
       uses: actions/checkout@v3
       with:
         fetch-depth: 0
 
-    # Step 2: Print working directory
+    # Print working directory
     - name: Print working directory
       run: pwd
     
@@ -26,46 +26,37 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y docker-compose
 
+    - name: Copy Airflow files to EC2
+      run: |
+        scp -i keys/learning.pem -r Airflow/{docker-compose.yml,dags,plugins,requirements.txt} ubuntu@3.22.249.244:/home/ubuntu/Airflow/
+
+    # Deploy Airflow Services on EC2
     - name: Deploy Airflow Services
       run: |
-        cd Airflow
-        docker-compose pull
-        docker-compose up -d --remove-orphans
+        ssh -i keys/learning.pem ubuntu@3.22.249.244 << EOF
+          cd /home/ubuntu/Airflow
+          docker-compose down --volumes --remove-orphans
+          docker-compose build
+          docker-compose up -d
+        EOF
 
-    # Step 3: Debug FastAPI Build Context
-    - name: Debug FastAPI build context
-      run: |
-        echo "Debugging FastAPI build context..."
-        ls -l ${{ github.workspace }}/fastapi
-
-    # Step 4: Free up Disk Space
-    - name: Free up disk space
-      run: |
-        echo "Cleaning up unused resources..."
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        docker system prune -af || true
-        docker volume prune -f || true
-        df -h
-
-    # Step 5: Set up Docker Buildx
+    # Set up Docker Buildx
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
-    # Step 6: Log in to DockerHub
+    # Log in to DockerHub
     - name: Log in to DockerHub
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # Step 7: Build FastAPI Image (using direct Dockerfile reference)
+    # Build FastAPI Image (using direct Dockerfile reference)
     - name: Build FastAPI image using explicit Dockerfile
       run: |
         docker buildx build \
           --file ${{ github.workspace }}/fastapi/Dockerfile \
           ${{ github.workspace }}/fastapi
 
-    # Step 8: Build and push FastAPI image
+    # Build and push FastAPI image
     - name: Build and push FastAPI image
       run: |
         docker buildx build \
@@ -77,7 +68,7 @@ jobs:
           --tag ${{ secrets.DOCKER_USERNAME }}/fastapi:${{ github.sha }} \
           ${{ github.workspace }}/fastapi
 
-    # Step 9: Build and push Streamlit Image
+    # Build and push Streamlit Image
     - name: Build and push Streamlit image
       run: |
         docker buildx build \
@@ -89,7 +80,7 @@ jobs:
           --tag ${{ secrets.DOCKER_USERNAME }}/streamlit:${{ github.sha }} \
           ./streamlit
 
-    # Step 10: Create .env file for secrets
+    # Create .env file for secrets
     - name: Create .env file
       run: |
         echo "FASTAPI_URL=${{ secrets.FASTAPI_URL }}" > .env
@@ -112,25 +103,25 @@ jobs:
         echo "REGION=${{ secrets.REGION }}" >> .env      
         echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env  
 
-    # Step 11: Ensure Docker Network Exists
+    # Ensure Docker Network Exists
     - name: Ensure Docker Network Exists
       run: |
         docker network inspect learningassistant_app-network || docker network create learningassistant_app-network
 
-    # Step 12: Deploy with Docker Compose
+    # Deploy with Docker Compose
     - name: Deploy with Docker Compose
       run: |
         docker-compose pull
         docker-compose up -d --remove-orphans
 
-    # Step 13: Verify Deployment
+    # Verify Deployment
     - name: Check FastAPI service health
       run: |
         retries=10
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking FastAPI service health (attempt $i/$retries)..."
-          curl -f http://localhost:8000/docs && break || sleep $delay
+          curl -f http://3.22.249.244:8000/docs && break || sleep $delay
         done
 
     - name: Check Streamlit service health
@@ -139,7 +130,7 @@ jobs:
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking Streamlit service health (attempt $i/$retries)..."
-          curl -f http://localhost:8501 && break || sleep $delay
+          curl -f http://3.22.249.244:8501 && break || sleep $delay
         done
     
     - name: Check Airflow service health
@@ -148,5 +139,5 @@ jobs:
         delay=10
         for i in $(seq 1 $retries); do
           echo "Checking Airflow service health (attempt $i/$retries)..."
-          curl -f http://localhost:8080 && break || sleep $delay
+          curl -f http://3.22.249.244:8080 && break || sleep $delay
         done

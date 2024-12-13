@@ -287,7 +287,6 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
     finally:
         connection.close()
 
-
 @app.get("/get_plans")
 def get_plans(username: str = Depends(get_current_username), page: int = 1, size: Optional[int] = 0):
     """

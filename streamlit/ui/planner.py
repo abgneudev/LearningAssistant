@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Get the FastAPI URL from environment variables
-DEPLOYED_URL = os.getenv("DEPLOY_URL", "http://127.0.0.1:8000")
+DEPLOY_URL = os.getenv("DEPLOY_URL", "http://127.0.0.1:8000")
 
 def main():
 
@@ -58,7 +58,7 @@ def main():
         # Make a request to the backend for processing
         try:
             response = requests.post(
-                f"{DEPLOYED_URL}/query",
+                f"{DEPLOY_URL}/query",
                 json={
                     "user_query": user_query,
                     "current_plan": st.session_state.get("current_plan"),
@@ -136,7 +136,7 @@ def main():
         if st.button("Save Plan to Database", key="save_plan_button"):
             try:
                 save_response = requests.post(
-                    f"{DEPLOYED_URL}/save_plan",
+                    f"{DEPLOY_URL}/save_plan",
                     json={
                         "plan": st.session_state["current_plan"],
                         "summary": st.session_state["current_summary"],

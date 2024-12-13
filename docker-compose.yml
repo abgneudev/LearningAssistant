@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     environment:
       # FastAPI Configuration
-      DEPLOYED_URL: ${DEPLOY_URL}
+      DEPLOY_URL: ${DEPLOY_URL}
 
       # Snowflake Configuration
       SNOWFLAKE_USER: ${SNOWFLAKE_USER}

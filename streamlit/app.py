@@ -12,20 +12,20 @@ st.set_page_config(layout="wide")
 load_dotenv()
 
 # FastAPI URL from environment variables
-DEPLOYED_URL = os.getenv("DEPLOY_URL", "http://127.0.0.1:8000")
+DEPLOY_URL = os.getenv("DEPLOY_URL", "http://127.0.0.1:8000")
 
 def user_signup(username, password):
     """
     Function to register a new user, sending a post request to the FastAPI backend
     """
-    response = requests.post(f"{DEPLOYED_URL}/signup", params={"username": username, "password": password})
+    response = requests.post(f"{DEPLOY_URL}/signup", params={"username": username, "password": password})
     return response.json()
 
 def user_login(username, password):
     """
     Function to login an existing user, verifying the user credentials through FastAPI
     """
-    response = requests.post(f"{DEPLOYED_URL}/login", params={"username": username, "password": password})
+    response = requests.post(f"{DEPLOY_URL}/login", params={"username": username, "password": password})
     return response.json()
 
 def signup():

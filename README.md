@@ -1,9 +1,19 @@
 # AIVY - AI Powered Learning Assistant
 
 ## **Overview**
+Aivy: AI Learning Assistant
+Aivy is a next-generation learning assistant that integrates various educational tools into a unified platform. Built with Airflow, FastAPI, and Streamlit, it offers a personalized, engaging, and efficient learning experience by combining text, videos, flashcards, and quizzes.
+
+Why Aivy?
+
+- Unified Learning Tools: Access all your learning content (text, images, videos, quizzes) in one place.
+- Personalized Assistance: AI tailors learning content and assessments to user needs.
+- Advanced Search: Powered by RAG (Retrieval-Augmented Generation) for context-aware results.
+- Engaging UI: Intuitive, interactive, and user-friendly.
+
+Architecture diagram for the same: 
 
 
----
 
 ## **Key Features**
 1. **Dynamic Lesson Plans**:
@@ -120,6 +130,7 @@ docker-compose up --build
 ```bash
 cd fastapi
 source venv_fastapi/bin/activate
+poetry install
 uvicorn main:app --reload
 ```
 
@@ -127,6 +138,7 @@ uvicorn main:app --reload
 ```bash
 cd streamlit
 source venv_streamlit/bin/activate
+poetry install
 streamlit run app.py
 ```
 

@@ -81,7 +81,7 @@ jobs:
         echo "IMAGE_DIMENSIONS=${{ secrets.IMAGE_DIMENSIONS }}" >> .env  
 
     - name: Copy .env file to EC2
-      uses: appleboy/scp-action@v1.2.0
+      uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -91,7 +91,7 @@ jobs:
 
     
     - name: Copy docker-compose.yml to EC2
-      uses: appleboy/scp-action@v1.2.0
+      uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
@@ -100,7 +100,7 @@ jobs:
         target: /home/ubuntu/
 
     - name: Deploy on EC2
-      uses: appleboy/ssh-action@v1.2.0
+      uses: appleboy/ssh-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu

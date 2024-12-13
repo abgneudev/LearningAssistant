@@ -26,14 +26,19 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y docker-compose
 
+    - name: Create SSH Key
+      run: |
+        echo "${{ secrets.EC2_SSH_KEY }}" > learning.pem
+        chmod 600 learning.pem
+
     - name: Copy Airflow files to EC2
       run: |
-        scp -i keys/learning.pem -r Airflow/{docker-compose.yml,dags,plugins,requirements.txt} ubuntu@3.22.249.244:/home/ubuntu/Airflow/
+        scp -i learning.pem -r Airflow/{docker-compose.yml,dags,plugins,requirements.txt} ubuntu@3.22.249.244:/home/ubuntu/Airflow/
 
     # Deploy Airflow Services on EC2
     - name: Deploy Airflow Services
       run: |
-        ssh -i keys/learning.pem ubuntu@3.22.249.244 << EOF
+        ssh -i learning.pem ubuntu@3.22.249.244 << EOF
           cd /home/ubuntu/Airflow
           docker-compose down --volumes --remove-orphans
           docker-compose build
@@ -113,6 +118,9 @@ jobs:
       run: |
         docker-compose pull
         docker-compose up -d --remove-orphans
+
+    - name: Cleanup SSH Key
+      run: rm -f learning.pem
 
     # Verify Deployment
     - name: Check FastAPI service health

@@ -94,7 +94,7 @@ jobs:
     # Create .env file for secrets
     - name: Create .env file
       run: |
-        echo "FASTAPI_URL=${{ secrets.FASTAPI_URL }}" > .env
+        echo "DEPLOYED_URL=${{ secrets.DEPLOYED_URL }}" > .env
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
         echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
         echo "PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}" >> .env

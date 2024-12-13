@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Get the FastAPI URL from environment variables
-FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
+DEPLOYED_URL = os.getenv("DEPLOYED_URL", "http://127.0.0.1:8000")
 
 def main():
     st.title("Lesson Details")
@@ -27,7 +27,7 @@ def main():
     # Fetch details for the selected module from the backend
     try:
         response = requests.get(
-            f"{FASTAPI_URL}/get_module_details/{selected_module_id}",
+            f"{DEPLOYED_URL}/get_module_details/{selected_module_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code == 200:
@@ -62,7 +62,7 @@ def main():
     try:
         with st.spinner("Fetching the most relevant YouTube video..."):
             video_response = requests.get(
-                f"{FASTAPI_URL}/get_relevant_youtube_video/{selected_module_id}"
+                f"{DEPLOYED_URL}/get_relevant_youtube_video/{selected_module_id}"
             )
 
         if video_response.status_code == 200:
@@ -81,7 +81,7 @@ def main():
     if video_response.status_code == 200 and video_data.get("video_url"):
         try:
             with st.spinner("Generating flashcards..."):
-                flashcards_response = requests.get(f"{FASTAPI_URL}/generate_flashcards/{selected_module_id}")
+                flashcards_response = requests.get(f"{DEPLOYED_URL}/generate_flashcards/{selected_module_id}")
             if flashcards_response.status_code == 200:
                 # Parse the JSON response
                 flashcards_data = flashcards_response.json()  # Expecting a nested JSON structure
@@ -107,7 +107,7 @@ def main():
     # if video_response.status_code == 200 and video_data.get("video_url"):
     #     try:
     #         with st.spinner("Generating quiz..."):
-    #             quiz_response = requests.get(f"{FASTAPI_URL}/generate_quiz/{selected_module_id}")
+    #             quiz_response = requests.get(f"{DEPLOYED_URL}/generate_quiz/{selected_module_id}")
     #         if quiz_response.status_code == 200:
     #             # Parse the JSON response
     #             quiz_data = quiz_response.json()  # Expecting a nested JSON structure

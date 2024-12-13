@@ -224,6 +224,26 @@ class SummarizationRequest(BaseModel):
 #     module_id: str
 #     image_urls: List[str]
 
+class ArxivPaperResponse(BaseModel):
+    title: str
+    summary: str
+    authors: List[str]
+    published: str
+    link: str
+    pdf_url: Optional[str]
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "Deep Learning in Neural Networks: An Overview",
+                "summary": "This paper provides an overview of deep learning techniques and their applications.",
+                "authors": ["Jürgen Schmidhuber"],
+                "published": "2014-09-01T00:00:00Z",
+                "link": "http://arxiv.org/abs/1404.7828",
+                "pdf_url": "http://arxiv.org/pdf/1404.7828.pdf"
+            }
+        }
+
 # -------- Utility Functions --------
 
 def get_db_connection():

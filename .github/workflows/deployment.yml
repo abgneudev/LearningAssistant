@@ -33,6 +33,8 @@ jobs:
 
     - name: Add EC2 Host to Known Hosts
       run: |
+        mkdir -p ~/.ssh                
+        touch ~/.ssh/known_hosts
         ssh-keyscan -H 3.22.249.244 >> ~/.ssh/known_hosts
 
     - name: Copy Airflow files to EC2

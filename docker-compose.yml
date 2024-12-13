@@ -59,7 +59,7 @@ services:
       fastapi:
         condition: service_healthy
     volumes:
-      - /home/ubuntu/LearningAssistant/.env:/app/.env
+      - /home/ubuntu/.env:/app/.env
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8501 || exit 1"]

@@ -198,6 +198,25 @@ class YouTubeVideoResponse(BaseModel):
     video_url: Optional[str]
     relevance_score: Optional[float]
 
+# class FlashcardGeneration(BaseModel):
+#     question: str
+#     answer: str
+
+class Flashcard(BaseModel):
+    question: str
+    answer: str
+
+class FlashcardGeneration(BaseModel):
+    flashcards: List[Flashcard]
+
+class QuizQuestion(BaseModel):
+    question: str
+    options: List[str]
+    correct_answer: str
+
+class QuizGeneration(BaseModel):
+    quiz: List[QuizQuestion]
+
 # -------- Utility Functions --------
 
 def get_db_connection():

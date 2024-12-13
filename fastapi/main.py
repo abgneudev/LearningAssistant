@@ -28,6 +28,8 @@ from utils import (
     create_user,
     inspect_index,
     YouTubeVideoResponse,
+    FlashcardGeneration,
+    QuizGeneration,
     Module,
     Plan,
     pool,
@@ -450,26 +452,15 @@ def get_module_details(module_id: str):
         connection.close()
 
 @app.get("/get_relevant_youtube_video/{module_id}", response_model=YouTubeVideoResponse)
-async def get_relevant_youtube_video(module_id: str):
+async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends(get_module_details)):
+
     try:
         logger.info("Fetching relevant YouTube video for module ID: %s", module_id)
-        # Simulated database module details
 
-        connection = get_db_connection()
-        with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT TITLE, DESCRIPTION FROM MODULES WHERE MODULE_ID = %s",
-                    (module_id,)
-                )
-                module = cursor.fetchone()
-                if not module:
-                    raise HTTPException(status_code=404, detail=f"No module found with ID {module_id}")
+        module_title = cached_data["title"]
+        module_description = cached_data["description"]
+        module_detailed_explanation = cached_data["detailed_explanation"]
 
-                title, description = module
-
-        module_title = title
-        module_description = description
-        module_detailed_explanation = retrieve_detailed_explanation(title, description)  # Use existing function to get explanation
         combined_text = f"{module_title} {module_description} {module_detailed_explanation}"
 
         # Step 1: Summarize input text
@@ -501,13 +492,168 @@ async def get_relevant_youtube_video(module_id: str):
         best_match = search_results["matches"][0]
         video_url = f"https://www.youtube.com/watch?v={best_match['metadata']['video_id']}"
         relevance_score = best_match["score"]
+        transcript = fetch_video_transcript(best_match["metadata"]["video_id"]) or "Transcript unavailable."
 
-        return {"video_url": video_url, "relevance_score": relevance_score}
+        return {
+            "video_url": video_url,
+            "relevance_score": best_match["score"],
+            "transcript": transcript
+        }
+
+        # return {"video_url": video_url, "relevance_score": relevance_score}
 
     except Exception as e:
         logger.error(f"Error in /get_relevant_youtube_video endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
+logging.basicConfig(level=logging.DEBUG)  # Set the level to DEBUG or INFO
+logger = logging.getLogger(__name__)
+
+
+@app.get("/generate_flashcards/{module_id}", response_model=FlashcardGeneration)
+async def generate_flashcards(
+    module_id: str, 
+    cached_data: dict = Depends(get_module_details),
+    youtube_data: dict = Depends(get_relevant_youtube_video)
+):
+    
+    try:
+        logger.info("Generating flashcards for module ID: %s", module_id)
+        
+        module_detailed_explanation = cached_data["detailed_explanation"]
+
+        transcript = youtube_data.get("transcript", "")
+
+        context = (
+            "You are an expert summarizer and your job is to summarize the below data in 5-6 sentences."
+            f"Detailed Explanation: {module_detailed_explanation}\n"
+            f"Relevant YouTube Transcript: {transcript}\n\n"
+        )
+
+        system_prompt = (
+            "You are an educational assistant. Based on the provided context, "
+            "create concise flashcards. Each flashcard should have a 'question' and an 'answer' "
+            "that are directly relevant to the context. Output the flashcards in a JSON-like format, "
+            "with each flashcard being a nested object with 'question' and 'answer' keys. Strictly return "
+            "a valid JSON output only. Do not include any introductory text, explanations, or comments. "
+            "The response should look like this:\n"
+            "[\n"
+            "  {\"question\": \"What is question 1?\", \"answer\": \"Answer to question 1.\"},\n"
+            "  {\"question\": \"What is question 2?\", \"answer\": \"Answer to question 2.\"},\n"
+            "  ...\n"
+            "]"
+        )
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context},
+            ],
+            max_tokens=500,
+        )
+
+        flashcards_text = response.choices[0].message.content.strip()
+
+        # Parse the JSON-like response into nested question-answer objects
+
+        import json
+        flashcards = []
+        try:
+
+            flashcards = json.loads(flashcards_text)  # Parse JSON-like response
+            logger.debug("Successfully parsed JSON response for flashcards.")
+
+        except json.JSONDecodeError:
+
+            logger.warning("Response not in JSON format; attempting manual parsing.")
+            lines = flashcards_text.split("\n")
+            
+            for i in range(0, len(lines), 2):
+
+                question = lines[i].strip()
+                answer = lines[i + 1].strip() if i + 1 < len(lines) else ""
+                flashcards.append({"question": question, "answer": answer})
+
+        for idx, flashcard in enumerate(flashcards):
+
+            logger.debug("Flashcard %d: Question: %s, Answer: %s", idx + 1, flashcard.get("question"), flashcard.get("answer"))
+
+        # Return the flashcards wrapped in FlashcardGeneration model
+
+        return FlashcardGeneration(flashcards=flashcards)
+
+    except Exception as e:
+
+        logger.error(f"Error in /generate_flashcards endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+# @app.get("/generate_quiz/{module_id}", response_model=QuizGeneration)
+# async def generate_quiz(
+#     module_id: str,
+#     cached_data: dict = Depends(get_module_details),
+#     youtube_data: dict = Depends(get_relevant_youtube_video)
+# ):
+#     try:
+#         logger.info("Generating quiz for module ID: %s", module_id)
+
+#         # Extract module details and YouTube transcript
+#         module_detailed_explanation = cached_data["detailed_explanation"]
+#         transcript = youtube_data.get("transcript", "")
+
+#         # Combine context for quiz generation
+#         context = (
+#             f"Detailed Explanation: {module_detailed_explanation}\n"
+#             f"Relevant YouTube Transcript: {transcript}\n\n"
+#         )
+
+#         system_prompt = (
+#             "You are an educational assistant. Based on the provided context, "
+#             "create a quiz with 5 multiple-choice questions. Each question should have "
+#             "four answer options, and one should be the correct answer. Output the quiz "
+#             "in a JSON format with each question as an object containing 'question', 'options', "
+#             "and 'correct_answer' keys. Strictly return a valid JSON output only. Do not include "
+#             "any introductory text, explanations, or comments. The response should look like this:\n"
+#             "[\n"
+#             "  {\"question\": \"What is question 1?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option A\"},\n"
+#             "  {\"question\": \"What is question 2?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option B\"},\n"
+#             "  ...\n"
+#             "]"
+#         )
+
+#         # Generate quiz via OpenAI
+#         response = client.chat.completions.create(
+#             model="gpt-3.5-turbo",
+#             messages=[
+#                 {"role": "system", "content": system_prompt},
+#                 {"role": "user", "content": context},
+#             ],
+#             max_tokens=750,
+#         )
+
+#         quiz_text = response.choices[0].message.content.strip()
+
+#         # Parse the JSON-like response into question-answer objects
+#         import json
+#         quiz = []
+#         try:
+#             quiz = json.loads(quiz_text)  # Parse JSON-like response
+#             logger.debug("Successfully parsed JSON response for quiz.")
+#         except json.JSONDecodeError:
+#             logger.warning("Response not in JSON format; attempting manual parsing.")
+
+#         # Log the generated questions for debugging
+#         for idx, question in enumerate(quiz):
+#             logger.debug(
+#                 "Question %d: %s", idx + 1, question.get("question")
+#             )
+
+#         # Return the quiz wrapped in QuizGeneration model
+#         return QuizGeneration(quiz=quiz)
+
+#     except Exception as e:
+#         logger.error(f"Error in /generate_quiz endpoint: {str(e)}")
+#         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/")
 async def root():

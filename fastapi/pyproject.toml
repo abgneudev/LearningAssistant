@@ -6,7 +6,7 @@ authors = ["dhirthacker7neu <thacker.dh@northeastern.edu>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.14"  # Adjusting the Python version to match the dependency
+python = ">=3.10,<3.14"  # Adjusting the Python version to match the dependency
 fastapi = "^0.115.5"
 python-dotenv = "^1.0.1"
 passlib = "^1.7.4"

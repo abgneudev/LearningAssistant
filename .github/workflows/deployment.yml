@@ -103,6 +103,7 @@ jobs:
         echo "YOUTUBE_INDEX=${{ secrets.YOUTUBE_INDEX }}" >> .env
         echo "DIMENSION=${{ secrets.DIMENSION }}" >> .env
         echo "METRIC=${{ secrets.METRIC }}" >> .env
+        echo "FASTAPI_URL=${{ secrets.FASTAPI_URL }}" >> .env
         echo "SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }}" >> .env
         echo "SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }}" >> .env
         echo "SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }}" >> .env

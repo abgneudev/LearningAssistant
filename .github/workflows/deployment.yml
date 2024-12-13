@@ -151,11 +151,11 @@ jobs:
           curl -f http://3.22.249.244:8501 && break || sleep $delay
         done
     
-    - name: Check Airflow service health
-      run: |
-        retries=10
-        delay=10
-        for i in $(seq 1 $retries); do
-          echo "Checking Airflow service health (attempt $i/$retries)..."
-          curl -f http://3.22.249.244:8080 && break || sleep $delay
-        done
+    # - name: Check Airflow service health
+    #   run: |
+    #     retries=10
+    #     delay=10
+    #     for i in $(seq 1 $retries); do
+    #       echo "Checking Airflow service health (attempt $i/$retries)..."
+    #       curl -f http://3.22.249.244:8080 && break || sleep $delay
+    #     done

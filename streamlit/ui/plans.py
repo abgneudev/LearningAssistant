@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Get the FastAPI URL from environment variables
-FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
+DEPLOYED_URL = os.getenv("DEPLOYED_URL", "http://127.0.0.1:8000")
 
 def main():
     st.title("Saved Plans")
@@ -28,7 +28,7 @@ def main():
     # Fetch all saved plans for the logged-in user from the backend
     try:
         response = requests.get(
-            f"{FASTAPI_URL}/get_plans",
+            f"{DEPLOYED_URL}/get_plans",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code == 200:
@@ -91,7 +91,7 @@ def main():
         # Fetch modules for the selected plan
         try:
             modules_response = requests.get(
-                f"{FASTAPI_URL}/get_modules/{selected_plan_id}",
+                f"{DEPLOYED_URL}/get_modules/{selected_plan_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             if modules_response.status_code == 200:

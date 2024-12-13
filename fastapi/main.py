@@ -301,7 +301,6 @@ async def save_plan(request: dict, username: str = Depends(get_current_username)
     finally:
         connection.close()
 
-
 @app.get("/get_plans")
 def get_plans(username: str = Depends(get_current_username), page: int = 1, size: Optional[int] = 0):
     """
@@ -408,33 +407,55 @@ def get_module_details(module_id: str):
         try:
             
             system_prompt = f"""
-                You are an AI assistant tasked with synthesizing a detailed and professional article based on the provided explanation text. 
+                You are an AI assistant tasked with synthesizing a detailed and professional article based on the provided explanation text.
                 The explanations are curated to include highly relevant information (relevance score > 0.85) and represent key insights about the topic.
-
-                Context:
+ 
+                **Context**:
                 - Module Title: {title}
                 - Module Description: {description}
-
+ 
                 **Purpose**:
-                Your goal is to generate a comprehensive and insightful article that educates readers on the topic. 
+                Your goal is to generate a comprehensive and insightful article that educates readers on the topic.
                 The article should be structured naturally and cohesively, presenting the information in a logical and engaging manner.
-
+ 
                 **Content Guidelines**:
                 1. Use all the provided explanation text, ensuring the original meaning and context are retained.
                 2. Highlight key points and elaborate where necessary to ensure clarity and understanding.
-                3. Avoid introducing external information or data outside of what is provided.
-
+                3. Include relevant Python code snippets and formulas to enhance the explanation. For instance:
+                    - If the topic involves concepts like linear regression, present the formula \( y = mx + c \), explain each component (e.g., \( y \) is the target variable, \( m \) is the slope, \( x \) is the input feature, and \( c \) is the intercept), and provide Python code snippets such as:
+                    ```python
+                    # Example: Linear regression implementation
+                    from sklearn.linear_model import LinearRegression
+ 
+                    # Data
+                    X = [[1], [2], [3]]
+                    y = [2, 4, 6]
+ 
+                    # Model training
+                    model = LinearRegression()
+                    model.fit(X, y)
+ 
+                    # Making predictions
+                    predictions = model.predict([[4]])
+                    print(predictions)
+                    ```
+                    - Include code snippets wherever relevant information is being generated or derived, and explain how the code interacts with the formula, breaking down its components.
+                    - Code snippets should not be restricted to specific topics like linear regression but should be included wherever necessary to illustrate concepts effectively and provide practical context.
+                4. Ensure the code snippets and formulas are properly formatted, seamlessly integrated, and relevant to the explanation. Avoid overloading the article with unnecessary technical content. Focus on clarity and context.
+                5. Do not introduce any extra context accept the one user has provided you with.
+ 
                 **Style**:
                 - Write in a professional and engaging tone suitable for an educational audience.
                 - Organize the content in a manner that flows logically, allowing readers to follow the topic easily.
                 - Use paragraphs, headings, or bullet points where necessary to improve readability.
                 - Ensure smooth transitions between ideas and sections for coherence.
-
+ 
                 **Additional Instructions**:
                 - Focus on clarity, coherence, and logical progression of ideas.
                 - Avoid unnecessary repetition and ensure the article stays on topic.
-
-                Provided Explanation Text:
+                - don't hallucinate, don't bullshit, have concrete answers. NO ifs, maybes
+ 
+                **Provided Explanation Text**:
                 {raw_explanation}
             """
 
@@ -474,6 +495,11 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
         module_description = cached_data["description"]
         module_detailed_explanation = cached_data["detailed_explanation"]
 
+
+        module_title = cached_data["title"]
+        module_description = cached_data["description"]
+        module_detailed_explanation = cached_data["detailed_explanation"]
+
         combined_text = f"{module_title} {module_description} {module_detailed_explanation}"
 
         # Step 1: Summarize input text
@@ -505,6 +531,15 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
         best_match = search_results["matches"][0]
         video_url = f"https://www.youtube.com/watch?v={best_match['metadata']['video_id']}"
         relevance_score = best_match["score"]
+        transcript = fetch_video_transcript(best_match["metadata"]["video_id"]) or "Transcript unavailable."
+
+        return {
+            "video_url": video_url,
+            "relevance_score": best_match["score"],
+            "transcript": transcript
+        }
+
+        # return {"video_url": video_url, "relevance_score": relevance_score}
         transcript = fetch_video_transcript(best_match["metadata"]["video_id"]) or "Transcript unavailable."
 
         return {
@@ -694,75 +729,6 @@ async def generate_flashcards(
 
         logger.error(f"Error in /generate_flashcards endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
-
-    
-# @app.get("/generate_quiz/{module_id}", response_model=QuizGeneration)
-# async def generate_quiz(
-#     module_id: str,
-#     cached_data: dict = Depends(get_module_details),
-#     youtube_data: dict = Depends(get_relevant_youtube_video)
-# ):
-#     try:
-#         logger.info("Generating quiz for module ID: %s", module_id)
-
-#         # Extract module details and YouTube transcript
-#         module_detailed_explanation = cached_data["detailed_explanation"]
-#         transcript = youtube_data.get("transcript", "")
-
-#         # Combine context for quiz generation
-#         context = (
-#             f"Detailed Explanation: {module_detailed_explanation}\n"
-#             f"Relevant YouTube Transcript: {transcript}\n\n"
-#         )
-
-#         system_prompt = (
-#             "You are an educational assistant. Based on the provided context, "
-#             "create a quiz with 5 multiple-choice questions. Each question should have "
-#             "four answer options, and one should be the correct answer. Output the quiz "
-#             "in a JSON format with each question as an object containing 'question', 'options', "
-#             "and 'correct_answer' keys. Strictly return a valid JSON output only. Do not include "
-#             "any introductory text, explanations, or comments. The response should look like this:\n"
-#             "[\n"
-#             "  {\"question\": \"What is question 1?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option A\"},\n"
-#             "  {\"question\": \"What is question 2?\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correct_answer\": \"Option B\"},\n"
-#             "  ...\n"
-#             "]"
-#         )
-
-#         # Generate quiz via OpenAI
-#         response = client.chat.completions.create(
-#             model="gpt-3.5-turbo",
-#             messages=[
-#                 {"role": "system", "content": system_prompt},
-#                 {"role": "user", "content": context},
-#             ],
-#             max_tokens=750,
-#         )
-
-#         quiz_text = response.choices[0].message.content.strip()
-
-#         # Parse the JSON-like response into question-answer objects
-#         import json
-#         quiz = []
-#         try:
-#             quiz = json.loads(quiz_text)  # Parse JSON-like response
-#             logger.debug("Successfully parsed JSON response for quiz.")
-#         except json.JSONDecodeError:
-#             logger.warning("Response not in JSON format; attempting manual parsing.")
-
-#         # Log the generated questions for debugging
-#         for idx, question in enumerate(quiz):
-#             logger.debug(
-#                 "Question %d: %s", idx + 1, question.get("question")
-#             )
-
-#         # Return the quiz wrapped in QuizGeneration model
-#         return QuizGeneration(quiz=quiz)
-
-#     except Exception as e:
-#         logger.error(f"Error in /generate_quiz endpoint: {str(e)}")
-#         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/")
 async def root():

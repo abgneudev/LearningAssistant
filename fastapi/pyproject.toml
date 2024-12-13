@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["dhirthacker7neu <thacker.dh@northeastern.edu>"]
 readme = "README.md"
-
+ 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"  # Adjusting the Python version to match the dependency
 fastapi = "^0.115.5"
@@ -20,6 +20,7 @@ langsmith = "0.1.125"
 langchain-core = "0.2.43"
 fastapi-utils = "^0.8.0"
 typing-inspect = "^0.9.0"
+openai = "^1.57.2"
 tiktoken = "^0.8.0"
 scikit-learn = "^1.6.0"
 numpy = "^2.2.0"
@@ -27,8 +28,8 @@ pinecone = "^5.4.2"
 transformers = "^4.47.0"
 torch = "^2.5.1"
 pillow = "^11.0.0"
-openai = "^1.57.3"
-
+ 
+ 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

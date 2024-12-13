@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
  
 # Get the FastAPI URL from environment variables
-FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
- 
+DEPLOYED_URL = os.getenv("DEPLOYED_URL", "http://127.0.0.1:8000")
+
 def main():
     st.title("Lesson Details")
  
@@ -27,7 +27,7 @@ def main():
     # Fetch details for the selected module from the backend
     try:
         response = requests.get(
-            f"{FASTAPI_URL}/get_module_details/{selected_module_id}",
+            f"{DEPLOYED_URL}/get_module_details/{selected_module_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code == 200:
@@ -63,7 +63,7 @@ def main():
     try:
         st.markdown("### Related Images with Summaries")
         image_response = requests.get(
-            f"{FASTAPI_URL}/get_image_urls_with_summaries/{selected_module_id}",
+            f"{DEPLOYED_URL}/get_image_urls_with_summaries/{selected_module_id}",
             headers={"Authorization": f"Bearer {access_token}"}
         )
         if image_response.status_code == 200:
@@ -92,7 +92,7 @@ def main():
     try:
         with st.spinner("Fetching the most relevant YouTube video..."):
             video_response = requests.get(
-                f"{FASTAPI_URL}/get_relevant_youtube_video/{selected_module_id}"
+                f"{DEPLOYED_URL}/get_relevant_youtube_video/{selected_module_id}"
             )
         if video_response.status_code == 200:
             video_data = video_response.json()
@@ -110,7 +110,7 @@ def main():
     if video_response.status_code == 200 and video_data.get("video_url"):
         try:
             with st.spinner("Generating flashcards..."):
-                flashcards_response = requests.get(f"{FASTAPI_URL}/generate_flashcards/{selected_module_id}")
+                flashcards_response = requests.get(f"{DEPLOYED_URL}/generate_flashcards/{selected_module_id}")
             if flashcards_response.status_code == 200:
                 # Parse the JSON response
                 flashcards_data = flashcards_response.json()  # Expecting a nested JSON structure
@@ -133,38 +133,6 @@ def main():
         except Exception as e:
             st.error(f"An error occurred while generating flashcards: {e}")
 
-    # # Add a button to generate flashcards in the main content area
-    # st.markdown("### Generate Flashcards")
-    # if st.button("Generate Flashcards"):
-    #     if selected_module_id:
-    #         try:
-    #             with st.spinner("Generating flashcards..."):
-    #                 flashcards_response = requests.get(f"{FASTAPI_URL}/generate_flashcards/{selected_module_id}")
-    #             if flashcards_response.status_code == 200:
-    #                 # Parse the JSON response
-    #                 flashcards_data = flashcards_response.json()  # Expecting a nested JSON structure
-    #                 flashcards = flashcards_data.get("flashcards", [])  # Extract the list of flashcards
-    #                 if flashcards:
-    #                     st.subheader("Flashcards")
-    #                     for i, flashcard in enumerate(flashcards):
-    #                         question = flashcard.get("question", "Question not available.")
-    #                         answer = flashcard.get("answer", "Answer not available.")
-    #                         # Display question
-    #                         st.markdown(f"**Flashcard {i + 1}**")
-    #                         st.markdown(f"**Q: {question}**")
-    #                         # Add a button to reveal the answer
-    #                         if st.button(f"Show Answer for Flashcard {i + 1}", key=f"answer_btn_{i}"):
-    #                             st.markdown(f"**A: {answer}**")
-    #                         st.markdown("---")  # Separator for clarity
-    #                 else:
-    #                     st.warning("No flashcards generated. Please try again.")
-    #             else:
-    #                 st.error("Failed to generate flashcards. Please check the module ID or try again later.")
-    #         except Exception as e:
-    #             st.error(f"An error occurred while generating flashcards: {e}")
-    #     else:
-    #         st.warning("Please enter a Module ID to generate flashcards.")
- 
 if __name__ == "__main__":
     main()
  

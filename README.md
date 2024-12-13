@@ -13,7 +13,7 @@ Why Aivy?
 
 Architecture diagram for the same: 
 
-
+![Architecture Diagram](diagrams/images/architecture_diagram.png)
 
 ## **Key Features**
 1. **Dynamic Lesson Plans**:
@@ -88,6 +88,11 @@ The project is divided into three main components:
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   ├── README.md
+├── diagrams
+│   ├── images
+│   │   ├── folder_structure.png
+│   │   ├── architecture_diagram.png
+
 ```
 
 ---
@@ -145,11 +150,23 @@ streamlit run app.py
 ---
 You can access the related files to this project here:
 
-Documentation 
-Deployed fastapi 
-Deployed streamlit 
-Video link 
+Documentation - https://codelabs-preview.appspot.com/?file_id=1qj_hNrPvLQEQt1r2RgSReLwTkpFyHrK22inGdcHLsY8#0
+Deployed fastapi - http://3.14.131.176:8000/docs\
+Deployed streamlit - http://3.14.131.176:8501/
+Video link - 
 
 ## **Conclusion**
 This modular project integrates Airflow, FastAPI, and Streamlit to provide a dynamic learning assistant. With separate environments and comprehensive testing, it is scalable, efficient, and user-friendly.
+
+## Contribution 
+## Work Distribution
+
+| Name     | Tasks                                                                                               | Contribution (%) |
+|----------|-----------------------------------------------------------------------------------------------------|------------------|
+| Abhinav  | Logic/implementation (lesson, plan) (Streamlit), FastAPI, Dockerization,                            | 33.33            |
+|          | Integration, CI/CD, Deployment, Snowflake                                                           |                  |
+| Nishita  | Web scraping, Snowflake, Airflow, lesson logic/integration (image, quiz),                           | 33.33            |
+|          | Streamlit, FastAPI, Pinecone, Documentation                                                         |                  |
+| Dhir     | Lesson logic/integration (summary, YouTube video, flashcards, quiz), Streamlit, FastAPI, Snowflake  | 33.33            |
+
 

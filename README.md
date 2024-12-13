@@ -148,15 +148,17 @@ streamlit run app.py
 ```
 
 ---
-You can access the related files to this project here:
 
-Documentation - https://codelabs-preview.appspot.com/?file_id=1qj_hNrPvLQEQt1r2RgSReLwTkpFyHrK22inGdcHLsY8#0
-Deployed fastapi - http://3.14.131.176:8000/docs\
-Deployed streamlit - http://3.14.131.176:8501/
-Video link - 
+You can access the related files to this project here:  
+
+- Documentation: [Codelabs Documentation](https://codelabs-preview.appspot.com/?file_id=1qj_hNrPvLQEQr2RgSReLwTkpFyHrK22inGdcHLsY8#0)  
+- Deployed FastAPI: [FastAPI Docs](http://3.14.131.176:8000/docs)  
+- Deployed Streamlit: [Streamlit App](http://3.14.131.176:8501/)  
+- Video Link: [Project Demo](#)  
+
 
 ## **Conclusion**
-This modular project integrates Airflow, FastAPI, and Streamlit to provide a dynamic learning assistant. With separate environments and comprehensive testing, it is scalable, efficient, and user-friendly.
+This project integrates Airflow, FastAPI, and Streamlit to provide a dynamic learning assistant. With separate environments and comprehensive testing, it is scalable, efficient, and user-friendly.
 
 ## Contribution 
 ## Work Distribution

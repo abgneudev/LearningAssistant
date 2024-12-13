@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd ${{ matrix.service }}
-          poetry install
+          poetry install --with dev
 
       # Run Unit and Integration Tests
       - name: Run Unit and Integration Tests

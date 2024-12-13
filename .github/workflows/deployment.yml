@@ -111,6 +111,8 @@ jobs:
 
     # Verify Deployment
     - name: Check FastAPI service health
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
       run: |
         retries=10
         delay=10
@@ -120,6 +122,8 @@ jobs:
         done
 
     - name: Check Streamlit service health
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
       run: |
         retries=10
         delay=10

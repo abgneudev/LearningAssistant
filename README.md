@@ -4,7 +4,7 @@
 Aivy: AI Learning Assistant
 Aivy is a next-generation learning assistant that integrates various educational tools into a unified platform. Built with Airflow, FastAPI, and Streamlit, it offers a personalized, engaging, and efficient learning experience by combining text, videos, flashcards, and quizzes.
 
-- Video Link: [Project Demo](https://drive.google.com/drive/folders/1sBLrejhuyzoQXzyt3lf0hlBzZ16HBY_4?usp=drive_link)  
+Video Link: [Project Demo](https://drive.google.com/drive/folders/1sBLrejhuyzoQXzyt3lf0hlBzZ16HBY_4?usp=drive_link)  
 
 Why Aivy?
 

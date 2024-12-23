@@ -158,17 +158,17 @@ You can access the related files to this project here:
 
 
 ## **Conclusion**
-This project integrates Airflow, FastAPI, and Streamlit to provide a dynamic learning assistant. With separate environments and comprehensive testing, it is scalable, efficient, and user-friendly.
+This project integrates Airflow, FastAPI, and Streamlit to provide a dynamic learning assistant. It is scalable, efficient, and user-friendly with separate environments and comprehensive testing.
 
 ## Contribution 
 ## Work Distribution
 
 | Name     | Tasks                                                                                               | Contribution (%) |
 |----------|-----------------------------------------------------------------------------------------------------|------------------|
-| Abhinav  | Logic/implementation (lesson, plan) (Streamlit), FastAPI, Dockerization,                            | 33.33            |
-|          | Integration, CI/CD, Deployment, Snowflake                                                           |                  |
-| Nishita  | Web scraping, Snowflake, Airflow, lesson logic/integration (image, quiz),                           | 33.33            |
-|          | Streamlit, FastAPI, Pinecone, Documentation                                                         |                  |
-| Dhir     | Lesson logic/integration (summary, YouTube video, flashcards, quiz), Streamlit, FastAPI, Snowflake  | 33.33            |
+| Abhinav  | UX Design and Frontend Development (Streamlit), Backend Development (Fastapi), Dockerization        | 55               |
+|          | CI/CD pipeline and Deployment (Github Actions)                                                      |                  |
+| Nishita  | Web scraping, Airflow pipelines,                                                                    | 25               |
+|          | Vector DB setup (Pinecone), Documentation                                                           |                  |
+| Dhir     | Database setup, function for quiz generation, flashcards generation, lesson reading generation      | 20               |
 
 

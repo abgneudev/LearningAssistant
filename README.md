@@ -4,6 +4,8 @@
 Aivy: AI Learning Assistant
 Aivy is a next-generation learning assistant that integrates various educational tools into a unified platform. Built with Airflow, FastAPI, and Streamlit, it offers a personalized, engaging, and efficient learning experience by combining text, videos, flashcards, and quizzes.
 
+- Video Link: [Project Demo](https://drive.google.com/drive/folders/1sBLrejhuyzoQXzyt3lf0hlBzZ16HBY_4?usp=drive_link)  
+
 Why Aivy?
 
 - Unified Learning Tools: Access all your learning content (text, images, videos, quizzes) in one place.
@@ -154,7 +156,6 @@ You can access the related files to this project here:
 - Documentation: [Codelabs Documentation](https://codelabs-preview.appspot.com/?file_id=1qj_hNrPvLQEQt1r2RgSReLwTkpFyHrK22inGdcHLsY8#0) 
 - Deployed FastAPI: [FastAPI Docs](http://3.14.131.176:8000/docs)  
 - Deployed Streamlit: [Streamlit App](http://3.14.131.176:8501/)  
-- Video Link: [Project Demo](https://drive.google.com/drive/folders/1sBLrejhuyzoQXzyt3lf0hlBzZ16HBY_4?usp=drive_link)  
 
 
 ## **Conclusion**

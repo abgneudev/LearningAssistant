@@ -168,6 +168,6 @@ This project integrates Airflow, FastAPI, and Streamlit to provide a dynamic lea
 | Abhinav  | UX Design and Frontend Development (Streamlit), Backend Development (Fastapi), Dockerization        | 55               |
 |          | CI/CD pipeline and Deployment (Github Actions)                                                      |                  |
 | Nishita  | Web scraping, Airflow pipelines, Vector DB setup (Pinecone), Documentation                          | 25               |
-| Dhir     | Database setup, function for quiz generation, flashcards generation, lesson reading generation      | 20               |
+| Dhir     | Database Design, function for quiz generation, flashcards generation, lesson reading generation     | 20               |
 
 

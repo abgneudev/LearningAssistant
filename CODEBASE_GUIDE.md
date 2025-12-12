@@ -284,14 +284,14 @@ Utility functions and data models:
    ↓
 2. Store in Snowflake (STATUS='NEW')
    ↓
-3. Fetch Unprocessed Links
+3. Fetch unprocessed links
    ↓
-4. Process Each Link:
+4. Process each link:
    - Extract text & images
    - Generate embeddings
    - Upload to Pinecone
    ↓
-5. Mark as Processed (STATUS='PROCESSED')
+5. Mark as processed (STATUS='PROCESSED')
 ```
 
 ---
@@ -756,7 +756,7 @@ results = index.query(
 
 Based on commented code and structure:
 - Image summarization with OpenAI (currently commented)
-- Enhanced CLIP-based image search
+- Enhanced CLIP-based image search (CLIP = Contrastive Language-Image Pre-training)
 - More sophisticated caching
 - Advanced quiz types
 - Progress tracking
